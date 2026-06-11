@@ -91,3 +91,32 @@ The helper can be run using the `./kicad-helper` CLI wrapper:
   --schematic "path/to/schematic.kicad_sch" \
   --connections "U101:VCC to U102:GND"
 ```
+
+---
+
+## 🚀 Integrated Design Review Pipeline
+
+This tool integrates automation skills from the `kicad-happy` framework to perform comprehensive, automated hardware design reviews against KiCad projects. It covers:
+
+1. **Schematic & PCB Analysis**: Extracts component parameters, hierarchical sheet structures, physical trace geometries, and nets.
+2. **BOM Preparation & Sourcing**: Automatically extracts and maps Manufacturer Part Numbers (MPNs) from component value patterns, exports tracking CSV files, and synchronizes datasheets.
+3. **SPICE Simulation**: Runs ngspice simulations on subcircuits (voltage dividers, RC filters, decoupling networks, regulator feedback loops) to verify electronic characteristics.
+4. **EMC Pre-compliance**: Evaluates layout geometries (ground plane continuity, loop areas, switching noise) and rates compliance (Target: CISPR 32).
+5. **Thermal Audit**: Calculates power dissipation and junction temperatures to flag potential hotspots (e.g. shunt resistors).
+6. **DFM Analysis**: Checks physical design constraints against JLCPCB and PCBWay manufacturing limits.
+
+### Running a Design Review
+
+To run the complete design review pipeline on the default project:
+```bash
+./run_design_review.sh
+```
+
+You can also pass custom schematic, PCB, and output paths:
+```bash
+./run_design_review.sh <path_to_schematic> <path_to_pcb> <path_to_bom_csv> <path_to_output_dir>
+```
+
+Upon completion, a detailed markdown report is generated at:
+* [design_review_report.md](file:///Users/gary/hardwares/underwater-machine/schematic/analysis/design_review_report.md)
+
