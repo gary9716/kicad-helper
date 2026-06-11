@@ -117,6 +117,7 @@ def handle_create_symbol(args):
         pins=pins,
         ref_prefix=args.ref_prefix,
         width=args.width,
+        height=args.height,
         pin_length=args.pin_length
     )
     
@@ -177,6 +178,7 @@ def main():
     sym_parser.add_argument("--pins-json", help="Path to a JSON file (or a JSON string) defining the pins")
     sym_parser.add_argument("--ref-prefix", default="U", help="Reference designator prefix (default: U)")
     sym_parser.add_argument("--width", type=float, default=10.16, help="Width of the symbol body in mm (default: 10.16)")
+    sym_parser.add_argument("--height", type=float, help="Height of the symbol body in mm")
     sym_parser.add_argument("--pin-length", type=float, default=2.54, help="Pin length in mm (default: 2.54)")
     
     # place parser

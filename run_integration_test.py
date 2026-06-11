@@ -14,11 +14,14 @@ def main():
     schematic_dir = os.path.join(workspace_dir, "schematic")
     
     if not os.path.exists(schematic_dir):
-        print(f"Error: Target schematic directory '{schematic_dir}' does not exist.")
-        return
+        schematic_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_project")
+        print(f"Target schematic directory '{workspace_dir}/schematic' not found. Falling back to local '{schematic_dir}'.")
         
     lib_path = os.path.join(schematic_dir, "local_test.kicad_sym")
-    sch_path = os.path.join(schematic_dir, "communication.kicad_sch")
+    if "test_project" in schematic_dir:
+        sch_path = os.path.join(schematic_dir, "test_project.kicad_sch")
+    else:
+        sch_path = os.path.join(schematic_dir, "communication.kicad_sch")
     table_path = os.path.join(schematic_dir, "sym-lib-table")
     
     print("--- 1. Generating Custom Symbol ---")
@@ -37,7 +40,8 @@ def main():
         name="STM32_TEST",
         pins=pins,
         ref_prefix="U",
-        width=15.24
+        width=25.4,
+        height=20.32
     )
     
     save_symbol_to_library(lib_path, symbol_def)

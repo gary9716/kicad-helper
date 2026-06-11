@@ -1,0 +1,10 @@
+(sym_lib_table
+	(version 7)
+	(lib
+		(name local_test)
+		(type KiCad)
+		(uri "${KIPRJMOD}/local_test.kicad_sym")
+		(options "")
+		(descr "Test Custom Library")
+	)
+)

@@ -85,7 +85,7 @@ def parse_sexpr(content: str):
         
     return current[0] if current else []
 
-def format_sexpr(node, indent_level=0) -> str:
+def format_sexpr(node, indent_level=0, parent_tag=None, is_tag=False, child_idx=0) -> str:
     """
     Formats nested Python lists back to KiCad S-expression format.
     Ensures correct indentation and quotes strings where necessary.
@@ -95,14 +95,20 @@ def format_sexpr(node, indent_level=0) -> str:
         if isinstance(node, str):
             if not node:
                 return '""'
+            
+            # Check if this string must be quoted based on parent tag and index
+            QUOTED_VAL_TAGS = {'property', 'name', 'number', 'symbol', 'uuid', 'generator', 'generator_version'}
+            should_quote = False
+            if not is_tag:
+                if parent_tag in QUOTED_VAL_TAGS:
+                    should_quote = True
+                elif parent_tag == 'paper' and child_idx == 1:
+                    should_quote = True
+                
             # Check if it needs quotes
             # KiCad unquoted strings must only contain certain characters
             # and cannot conflict with keywords or numbers containing spaces/parens.
-            if any(c in node for c in ' ()"\t\n\r;#') or node in ['yes', 'no']:
-                escaped = node.replace('\\', '\\\\').replace('"', '\\"')
-                return f'"{escaped}"'
-            # Also if it looks like a symbol that has spaces or is empty
-            if not re.match(r'^[a-zA-Z0-9_./\-+:]+$', node):
+            if should_quote or any(c in node for c in ' ()"\t\n\r;#') or not re.match(r'^[a-zA-Z0-9_./\-+:]+$', node):
                 escaped = node.replace('\\', '\\\\').replace('"', '\\"')
                 return f'"{escaped}"'
             return node
@@ -133,14 +139,14 @@ def format_sexpr(node, indent_level=0) -> str:
     
     if should_inline:
         parts = []
-        for x in node:
-            parts.append(format_sexpr(x, 0))
+        for idx, x in enumerate(node):
+            parts.append(format_sexpr(x, 0, parent_tag=tag, is_tag=(idx == 0), child_idx=idx))
         return "(" + " ".join(parts) + ")"
     else:
         parts = []
-        parts.append(f"({format_sexpr(node[0], 0)}")
-        for x in node[1:]:
-            child_str = format_sexpr(x, indent_level + 1)
+        parts.append(f"({format_sexpr(node[0], 0, parent_tag=tag, is_tag=True, child_idx=0)}")
+        for idx, x in enumerate(node[1:], 1):
+            child_str = format_sexpr(x, indent_level + 1, parent_tag=tag, is_tag=False, child_idx=idx)
             if child_str.startswith("("):
                 parts.append("\n" + "\t" * (indent_level + 1) + child_str)
             else:
@@ -149,7 +155,7 @@ def format_sexpr(node, indent_level=0) -> str:
         # Determine if closing parenthesis goes on a new line
         last_is_nested = False
         if len(node) > 1:
-            last_str = format_sexpr(node[-1], indent_level + 1)
+            last_str = format_sexpr(node[-1], indent_level + 1, parent_tag=tag, is_tag=False, child_idx=len(node)-1)
             if last_str.startswith("("):
                 last_is_nested = True
                 

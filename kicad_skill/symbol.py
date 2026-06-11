@@ -1,7 +1,7 @@
 import os
 from .parser import parse_sexpr, format_sexpr
 
-def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, pin_length=2.54):
+def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, height=None, pin_length=2.54):
     """
     Generates a list representing a symbol's KiCad S-expression.
     Pins is a list of dictionaries, e.g.:
@@ -17,6 +17,7 @@ def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, pin_length=2.
     top_pins = [p for p in pins if p.get("side", "left") == "top"]
     bottom_pins = [p for p in pins if p.get("side", "left") == "bottom"]
     
+    # Group pins by side
     # Compute body dimensions
     spacing = 2.54
     max_side_pins = max(len(left_pins), len(right_pins))
@@ -24,9 +25,28 @@ def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, pin_length=2.
     
     height_pins = max(max_side_pins, 1)
     body_height = (height_pins + 1) * spacing
+    if height is not None:
+        body_height = max(height, body_height)
     
     width_pins = max(max_tb_pins, 1)
     body_width = max(width, (width_pins + 1) * spacing)
+    
+    # Adjust for pin name overlaps
+    import math
+    char_width = 1.0  # safe estimate for character width at 1.27 size
+    gap = 2.54
+    
+    max_left_len = max([len(p["name"]) for p in left_pins] + [0])
+    max_right_len = max([len(p["name"]) for p in right_pins] + [0])
+    min_width_names = (max_left_len + max_right_len) * char_width + gap
+    min_width_names = math.ceil(min_width_names / spacing) * spacing
+    body_width = max(body_width, min_width_names)
+    
+    max_top_len = max([len(p["name"]) for p in top_pins] + [0])
+    max_bottom_len = max([len(p["name"]) for p in bottom_pins] + [0])
+    min_height_names = (max_top_len + max_bottom_len) * char_width + gap
+    min_height_names = math.ceil(min_height_names / spacing) * spacing
+    body_height = max(body_height, min_height_names)
     
     # Center-align body
     left_x = -body_width / 2
@@ -137,6 +157,7 @@ def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, pin_length=2.
     # Full symbol definition
     symbol_def = [
         "symbol", name,
+        ["pin_names", ["offset", "1.016"]],
         ["in_bom", "yes"],
         ["on_board", "yes"]
     ]
