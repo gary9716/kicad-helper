@@ -29,6 +29,8 @@ A Python library and CLI helper tool to automate symbol generation, collision-fr
 ├── test_project/           # Local demo and playground
 │   ├── run_demo.py         # Python-based end-to-end placement & routing demo
 │   ├── run_cli_demo.sh     # Shell script showcasing equivalent CLI usage
+│   ├── run_flashlight_demo.py  # Python-based flashlight schematic layout demo
+│   ├── run_flashlight_e2e.py   # Python-based flashlight end-to-end schematic + PCB autorouting pipeline
 │   └── test_project.kicad_sch  # Target test schematic file
 ├── run_integration_test.py # Integration test script
 └── README.md               # This documentation
@@ -49,25 +51,44 @@ This script will:
 * Place 3 instances (`U101`, `U102`, `U103` (rotated 90°)) and resolve overlaps.
 * Route connection wires orthogonally between them.
 
-### 2. CLI Demo Script
+### 2. Flashlight E2E Design Pipeline
+To run the complete flashlight E2E schematic and PCB design pipeline (using **THT footprints with verified 3D models**):
+```bash
+/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3 test_project/run_flashlight_e2e.py
+```
+This script automates:
+1. Creating a custom schematic symbol library containing the THT components:
+   * **Battery Holder**: `KEYSTONE_2466` (AAA Battery Holder)
+   * **Slide Switch**: `OS102011MS2Q` (SPDT Slide Switch)
+   * **Resistor**: `R_Axial_DIN0207` (Axial Resistor)
+   * **LED**: `LED_D5.0mm` (5mm Radial LED)
+2. Placing and snapping symbols to the grid, and routing orthogonal connection wires.
+3. Automatically centering the schematic symbols and wires on the paper sheet.
+4. Performing a Schematic Electrical Rules Check (ERC).
+5. Initializing a PCB layout, drawing a centered board outline, placing THT footprints, and assigning nets.
+6. Exporting a Specctra DSN design, running FreeRouting CLI in headless mode to route THT tracks, and importing the Specctra SES session back into the PCB.
+7. Executing a PCB Design Rules Check (DRC) to verify there are 0 violations and 0 unconnected pins.
+8. Exporting the Bill of Materials (BOM) and running a DFM compliance audit.
+
+### 3. CLI Demo Script
 To see how the command-line helper works under the hood, run:
 ```bash
 ./test_project/run_cli_demo.sh
 ```
 
-### 3. Integration Tests
+### 4. Integration Tests
 To run integration tests against the communication schematic structure:
 ```bash
 python3 run_integration_test.py
 ```
 
-### 4. Unit Tests
+### 5. Unit Tests
 To run the mathematical layout, geometry bounding box, and A* grid routing unit tests:
 ```bash
 python3 -m unittest discover -s tests
 ```
 
-### 5. CI/CD Pipeline
+### 6. CI/CD Pipeline
 A GitHub Actions workflow is configured in [.github/workflows/ci.yml](file:///Users/gary/kicad-helper/.github/workflows/ci.yml). It automatically runs the full suite of unit and integration tests across Python versions 3.10, 3.11, and 3.12 on every push and pull request to the `main` branch.
 
 ---

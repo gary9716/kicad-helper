@@ -41,46 +41,46 @@ def main():
     # 3. Create custom symbols for the flashlight components
     print("[2/4] Generating custom symbols library...")
     
-    # Battery Holder (Keystone 3003)
+    # Battery Holder (THT Keystone 2466 1xAAA)
     bat_pins = [
         {"side": "left", "number": "1", "name": "VCC", "type": "power_out"},
         {"side": "right", "number": "2", "name": "GND", "type": "power_out"}
     ]
-    bat_sym = generate_symbol_sexpr("KEYSTONE_3003", bat_pins, ref_prefix="BT", width=12.7, height=12.7)
+    bat_sym = generate_symbol_sexpr("KEYSTONE_2466", bat_pins, ref_prefix="BT", width=12.7, height=12.7)
     save_symbol_to_library(lib_path, bat_sym)
     
-    # Slide Switch (CL-SB-12B-02T)
+    # Slide Switch (THT OS102011MS2Q SPDT)
     sw_pins = [
         {"side": "left", "number": "1", "name": "COM", "type": "passive"},
         {"side": "right", "number": "2", "name": "NO", "type": "passive"},
         {"side": "bottom", "number": "3", "name": "NC", "type": "passive"}
     ]
-    sw_sym = generate_symbol_sexpr("CL_SB_12B_02T", sw_pins, ref_prefix="SW", width=10.16, height=10.16)
+    sw_sym = generate_symbol_sexpr("OS102011MS2Q", sw_pins, ref_prefix="SW", width=10.16, height=10.16)
     save_symbol_to_library(lib_path, sw_sym)
     
-    # Resistor (RC0805FR)
+    # Resistor (THT Axial DIN0207)
     res_pins = [
         {"side": "left", "number": "1", "name": "1", "type": "passive"},
         {"side": "right", "number": "2", "name": "2", "type": "passive"}
     ]
-    res_sym = generate_symbol_sexpr("RC0805FR", res_pins, ref_prefix="R", width=7.62, height=5.08)
+    res_sym = generate_symbol_sexpr("R_Axial_DIN0207", res_pins, ref_prefix="R", width=7.62, height=5.08)
     save_symbol_to_library(lib_path, res_sym)
     
-    # LED (Everlight 19-217)
+    # LED (THT D5.0mm)
     led_pins = [
         {"side": "left", "number": "1", "name": "A", "type": "passive"},
         {"side": "right", "number": "2", "name": "K", "type": "passive"}
     ]
-    led_sym = generate_symbol_sexpr("EVERLIGHT_19_217", led_pins, ref_prefix="D", width=7.62, height=5.08)
+    led_sym = generate_symbol_sexpr("LED_D5.0mm", led_pins, ref_prefix="D", width=7.62, height=5.08)
     save_symbol_to_library(lib_path, led_sym)
     
     # 4. Place symbols
     print("[3/4] Placing symbol instances (with initial overlap at x=100, y=100)...")
     placements = [
-        {"lib_id": "flashlight:KEYSTONE_3003", "reference": "BT1", "value": "KEYSTONE_3003", "x": 100.0, "y": 100.0, "angle": 0.0},
-        {"lib_id": "flashlight:CL_SB_12B_02T", "reference": "SW1", "value": "CL_SB_12B_02T", "x": 100.0, "y": 100.0, "angle": 0.0},
-        {"lib_id": "flashlight:RC0805FR", "reference": "R1", "value": "RC0805FR", "x": 100.0, "y": 100.0, "angle": 0.0},
-        {"lib_id": "flashlight:EVERLIGHT_19_217", "reference": "D1", "value": "EVERLIGHT_19_217", "x": 100.0, "y": 100.0, "angle": 0.0}
+        {"lib_id": "flashlight:KEYSTONE_2466", "reference": "BT1", "value": "KEYSTONE_2466", "x": 100.0, "y": 100.0, "angle": 0.0, "properties": {"Footprint": "Battery:BatteryHolder_Keystone_2466_1xAAA"}},
+        {"lib_id": "flashlight:OS102011MS2Q", "reference": "SW1", "value": "OS102011MS2Q", "x": 100.0, "y": 100.0, "angle": 0.0, "properties": {"Footprint": "Button_Switch_THT:SW_Slide_SPDT_Straight_CK_OS102011MS2Q"}},
+        {"lib_id": "flashlight:R_Axial_DIN0207", "reference": "R1", "value": "R_Axial_DIN0207", "x": 100.0, "y": 100.0, "angle": 0.0, "properties": {"Footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"}},
+        {"lib_id": "flashlight:LED_D5.0mm", "reference": "D1", "value": "LED_D5.0mm", "x": 100.0, "y": 100.0, "angle": 0.0, "properties": {"Footprint": "LED_THT:LED_D5.0mm"}}
     ]
     
     resolved = place_symbols_and_resolve(
