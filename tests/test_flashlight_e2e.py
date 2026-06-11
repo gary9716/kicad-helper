@@ -257,13 +257,21 @@ class TestFlashlightE2E(unittest.TestCase):
         center_schematic(self.sch_path)
         
         # Step 4: Run ERC check using kicad-cli
-        print("--- Running Schematic ERC ---")
-        kicad_cli = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
-        res_erc = subprocess.run([
-            kicad_cli, "sch", "erc", self.sch_path, "-o", self.erc_report_path
-        ], cwd=self.test_dir, capture_output=True, text=True)
-        self.assertTrue(os.path.exists(self.erc_report_path), "ERC report was not generated!")
-        print("ERC Report successfully generated.")
+        kicad_cli = shutil.which("kicad-cli")
+        if not kicad_cli:
+            mac_path = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
+            if os.path.exists(mac_path):
+                kicad_cli = mac_path
+        
+        if not kicad_cli:
+            print("--- kicad-cli is not available, skipping ERC check ---")
+        else:
+            print("--- Running Schematic ERC ---")
+            res_erc = subprocess.run([
+                kicad_cli, "sch", "erc", self.sch_path, "-o", self.erc_report_path
+            ], cwd=self.test_dir, capture_output=True, text=True)
+            self.assertTrue(os.path.exists(self.erc_report_path), "ERC report was not generated!")
+            print("ERC Report successfully generated.")
 
         # Step 5: Run PCB routing and DFM checks if pcbnew is available
         if not HAS_PCBNEW:
