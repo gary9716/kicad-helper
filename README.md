@@ -61,6 +61,12 @@ To run integration tests against the communication schematic structure:
 python3 run_integration_test.py
 ```
 
+### 4. Unit Tests
+To run the mathematical layout, geometry bounding box, and A* grid routing unit tests:
+```bash
+python3 -m unittest discover -s tests
+```
+
 ---
 
 ## CLI Usage
