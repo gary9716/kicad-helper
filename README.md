@@ -67,6 +67,9 @@ To run the mathematical layout, geometry bounding box, and A* grid routing unit 
 python3 -m unittest discover -s tests
 ```
 
+### 5. CI/CD Pipeline
+A GitHub Actions workflow is configured in [.github/workflows/ci.yml](file:///Users/gary/kicad-helper/.github/workflows/ci.yml). It automatically runs the full suite of unit and integration tests across Python versions 3.10, 3.11, and 3.12 on every push and pull request to the `main` branch.
+
 ---
 
 ## CLI Usage
