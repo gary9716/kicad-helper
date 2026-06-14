@@ -10,3 +10,4 @@ test_project/flashlight_demo/
 test_project/freerouting.jar
 test_project/test.kicad_prl
 test_project/test.kicad_pro
+.venv/

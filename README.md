@@ -43,7 +43,7 @@ A Python library and CLI helper tool to automate symbol generation, collision-fr
 ### 1. Python Demo Script
 To run the end-to-end Python demo, execute:
 ```bash
-python3 test_project/run_demo.py
+uv run test_project/run_demo.py
 ```
 This script will:
 * Clear all existing components and wires from `test_project/test_project.kicad_sch` to start fresh.
@@ -79,13 +79,13 @@ To see how the command-line helper works under the hood, run:
 ### 4. Integration Tests
 To run integration tests against the communication schematic structure:
 ```bash
-python3 run_integration_test.py
+uv run run_integration_test.py
 ```
 
 ### 5. Unit Tests
 To run the mathematical layout, geometry bounding box, and A* grid routing unit tests:
 ```bash
-python3 -m unittest discover -s tests
+uv run python -m unittest discover -s tests
 ```
 
 ### 6. CI/CD Pipeline
