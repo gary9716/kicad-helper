@@ -197,6 +197,29 @@ def main():
     connect_parser.add_argument("--table", help="Path to the sym-lib-table file (default: same folder as schematic)")
     connect_parser.add_argument("--diagonal", action="store_true", help="Use straight diagonal wires instead of L-shaped orthogonal lines")
     
+    # simulate parser
+    sim_parser = subparsers.add_parser("simulate", help="Run SPICE simulation on a KiCad schematic")
+    sim_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    sim_parser.add_argument("--output", help="Path to the output simulation JSON report")
+    sim_parser.add_argument("--workdir", help="Directory for temporary simulation files (.cir, .log)")
+    sim_parser.add_argument("--simulator", choices=["ngspice", "ltspice", "xyce"], help="Force specific SPICE simulator")
+    sim_parser.add_argument("--types", help="Comma-separated list of subcircuit types to simulate")
+    sim_parser.add_argument("--monte-carlo", type=int, default=0, help="Number of Monte Carlo tolerance trials (0 to disable)")
+    sim_parser.add_argument("--mc-distribution", choices=["gaussian", "uniform"], default="gaussian", help="Monte Carlo distribution (default: gaussian)")
+    sim_parser.add_argument("--mc-seed", type=int, default=42, help="Random seed for Monte Carlo runs (default: 42)")
+    sim_parser.add_argument("--parasitics", help="Path to PCB parasitic JSON from extract_parasitics.py")
+    sim_parser.add_argument("--compact", action="store_true", help="Compact output (omit file paths)")
+
+    # add-spice-model parser
+    model_parser = subparsers.add_parser("add-spice-model", help="Generate and attach a SPICE model to a custom symbol")
+    model_parser.add_argument("--library", required=True, help="Path to the .kicad_sym library file")
+    model_parser.add_argument("--symbol", required=True, help="Name of the symbol in the library")
+    model_parser.add_argument("--model-type", required=True, choices=["opamp", "ldo", "comparator", "vref"], help="Type of behavioral model to build")
+    model_parser.add_argument("--pin-mapping", required=True, help="Pin mapping shorthand, e.g. '1=inp,2=inn,3=out,4=vcc,5=vee'")
+    model_parser.add_argument("--model-file", help="Path to output SPICE .lib file (default: same folder/name as symbol)")
+    model_parser.add_argument("--params", help="Key-value parameters or JSON string for the model specs")
+    model_parser.add_argument("--model-name", help="Custom name for the subcircuit model (default: matches symbol name)")
+    
     args = parser.parse_args()
     
     if args.command == "create-symbol":
@@ -205,6 +228,12 @@ def main():
         handle_place(args)
     elif args.command == "connect":
         handle_connect(args)
+    elif args.command == "simulate":
+        from .simulation import handle_simulate
+        handle_simulate(args)
+    elif args.command == "add-spice-model":
+        from .simulation import handle_add_spice_model
+        handle_add_spice_model(args)
     else:
         parser.print_help()
 

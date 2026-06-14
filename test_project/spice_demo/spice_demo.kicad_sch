@@ -1,0 +1,346 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "3d1b3240-5a3b-419b-a010-090f230588aa")
+	(paper "A4" portrait)
+	(lib_symbols
+		(symbol "spice_demo:KEYSTONE_2466"
+			(pin_names
+				(offset 1.016)
+			)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "BT"
+				(at -5.08 -7.62 0)
+				(effects (font (size 1.27 1.27)) (justify left))
+			)
+			(property "Value" "KEYSTONE_2466"
+				(at -5.08 7.62 0)
+				(effects (font (size 1.27 1.27)) (justify left))
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font (size 1.27 1.27))
+					(hide yes)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(effects
+					(font (size 1.27 1.27))
+					(hide yes)
+				)
+			)
+			(symbol "KEYSTONE_2466_0_1"
+				(rectangle
+					(start -5.08 -5.08)
+					(end 5.08 5.08)
+					(stroke (width 0.254) (type default))
+					(fill (type background))
+				)
+			)
+			(symbol "KEYSTONE_2466_1_1"
+				(pin power_out line
+					(at -7.62 0.00 0)
+					(length 2.54)
+					(name "VCC"
+						(effects (font (size 1.27 1.27)))
+					)
+					(number "1"
+						(effects (font (size 1.27 1.27)))
+					)
+				)
+				(pin power_out line
+					(at 7.62 0.00 180)
+					(length 2.54)
+					(name "GND"
+						(effects (font (size 1.27 1.27)))
+					)
+					(number "2"
+						(effects (font (size 1.27 1.27)))
+					)
+				)
+			)
+		)
+		(symbol "spice_demo:R"
+			(pin_names
+				(offset 1.016)
+			)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "R"
+				(at -2.54 -5.08 0)
+				(effects (font (size 1.27 1.27)) (justify left))
+			)
+			(property "Value" "R"
+				(at -2.54 5.08 0)
+				(effects (font (size 1.27 1.27)) (justify left))
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font (size 1.27 1.27))
+					(hide yes)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(effects
+					(font (size 1.27 1.27))
+					(hide yes)
+				)
+			)
+			(symbol "R_0_1"
+				(rectangle
+					(start -2.54 -2.54)
+					(end 2.54 2.54)
+					(stroke (width 0.254) (type default))
+					(fill (type background))
+				)
+			)
+			(symbol "R_1_1"
+				(pin passive line
+					(at -5.08 0.00 0)
+					(length 2.54)
+					(name "1"
+						(effects (font (size 1.27 1.27)))
+					)
+					(number "1"
+						(effects (font (size 1.27 1.27)))
+					)
+				)
+				(pin passive line
+					(at 5.08 0.00 180)
+					(length 2.54)
+					(name "2"
+						(effects (font (size 1.27 1.27)))
+					)
+					(number "2"
+						(effects (font (size 1.27 1.27)))
+					)
+				)
+			)
+		)
+		(symbol "spice_demo:C"
+			(pin_names
+				(offset 1.016)
+			)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "C"
+				(at -2.54 -5.08 0)
+				(effects (font (size 1.27 1.27)) (justify left))
+			)
+			(property "Value" "C"
+				(at -2.54 5.08 0)
+				(effects (font (size 1.27 1.27)) (justify left))
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font (size 1.27 1.27))
+					(hide yes)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(effects
+					(font (size 1.27 1.27))
+					(hide yes)
+				)
+			)
+			(symbol "C_0_1"
+				(rectangle
+					(start -2.54 -2.54)
+					(end 2.54 2.54)
+					(stroke (width 0.254) (type default))
+					(fill (type background))
+				)
+			)
+			(symbol "C_1_1"
+				(pin passive line
+					(at -5.08 0.00 0)
+					(length 2.54)
+					(name "1"
+						(effects (font (size 1.27 1.27)))
+					)
+					(number "1"
+						(effects (font (size 1.27 1.27)))
+					)
+				)
+				(pin passive line
+					(at 5.08 0.00 180)
+					(length 2.54)
+					(name "2"
+						(effects (font (size 1.27 1.27)))
+					)
+					(number "2"
+						(effects (font (size 1.27 1.27)))
+					)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id spice_demo:KEYSTONE_2466)
+		(at 69.850 80.010 0.0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(uuid "84846cc5-df7a-4477-bf6f-cb23866c17af")
+		(property "Reference" "BT1"
+			(at 69.850 72.390 0.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "KEYSTONE_2466"
+			(at 69.850 87.630 0.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Battery:BatteryHolder_Keystone_2466_1xAAA"
+			(at 69.850 80.010 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 69.850 80.010 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+	)
+	(symbol
+		(lib_id spice_demo:R)
+		(at 110.490 69.850 0.0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(uuid "824a59f6-6656-43d5-a2c8-04a44835965e")
+		(property "Reference" "R1"
+			(at 110.490 64.770 0.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "10k"
+			(at 110.490 74.930 0.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
+			(at 110.490 69.850 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 110.490 69.850 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+	)
+	(symbol
+		(lib_id spice_demo:C)
+		(at 110.490 90.170 90.0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(uuid "be2c0191-8cd1-4591-97ea-c759f6a03005")
+		(property "Reference" "C1"
+			(at 115.570 90.170 90.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "100nF"
+			(at 105.410 90.170 90.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P2.54mm"
+			(at 110.490 90.170 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 110.490 90.170 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+	)
+	(symbol
+		(lib_id spice_demo:R)
+		(at 149.860 69.850 0.0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(uuid "9d1b9f92-c82c-42fa-9635-8d80d0edc3b5")
+		(property "Reference" "R2"
+			(at 149.860 64.770 0.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "10k"
+			(at 149.860 74.930 0.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
+			(at 149.860 69.850 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 149.860 69.850 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+	)
+	(symbol
+		(lib_id spice_demo:R)
+		(at 149.860 90.170 90.0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(uuid "caad0c84-3b76-487b-a6de-5cb1f856e7ec")
+		(property "Reference" "R3"
+			(at 154.940 90.170 90.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "10k"
+			(at 144.780 90.170 90.0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
+			(at 149.860 90.170 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 149.860 90.170 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+	)
+	(wire (pts (xy 115.570 69.850) (xy 115.570 85.090)) (stroke (width 0) (type default)) (uuid "da257d5a-5f3c-49e8-b1cc-d2962f280f18"))
+	(wire (pts (xy 115.570 85.090) (xy 110.490 85.090)) (stroke (width 0) (type default)) (uuid "da392951-04d3-4269-8443-bb2bb089bfbd"))
+	(wire (pts (xy 62.230 80.010) (xy 62.230 64.770)) (stroke (width 0) (type default)) (uuid "e1ed5a17-de2e-451f-b3aa-037a0b49110f"))
+	(wire (pts (xy 62.230 64.770) (xy 144.780 64.770)) (stroke (width 0) (type default)) (uuid "4c9fc250-44bc-455e-8bae-f91e1860f149"))
+	(wire (pts (xy 144.780 64.770) (xy 144.780 69.850)) (stroke (width 0) (type default)) (uuid "6f8d886b-dd15-4197-bb3a-363ccf1e45a0"))
+	(wire (pts (xy 154.940 69.850) (xy 154.940 85.090)) (stroke (width 0) (type default)) (uuid "86edc35b-8ae2-4179-a045-430217be9c30"))
+	(wire (pts (xy 154.940 85.090) (xy 149.860 85.090)) (stroke (width 0) (type default)) (uuid "f2f84c33-c736-45e2-bded-777b52f38621"))
+	(wire (pts (xy 149.860 95.250) (xy 149.860 96.520)) (stroke (width 0) (type default)) (uuid "f035e9ed-42fc-4388-bad6-8a41a6d65a15"))
+	(wire (pts (xy 149.860 96.520) (xy 77.470 96.520)) (stroke (width 0) (type default)) (uuid "967fc83e-cefe-49fb-8d12-181099487b13"))
+	(wire (pts (xy 77.470 96.520) (xy 77.470 80.010)) (stroke (width 0) (type default)) (uuid "a04fa268-ea17-448b-8b75-d4701e1bad5d"))
+)

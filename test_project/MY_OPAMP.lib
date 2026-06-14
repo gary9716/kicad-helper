@@ -1,0 +1,24 @@
+.subckt OPAMP_MY_OPAMP inp inn out vcc vee
+* Behavioral model for MY_OPAMP
+* GBW=1.0MHz, SR=1.5V/us, Vos=2.0mV, Aol=100.0dB
+* Source: kicad-happy part library (Phase 2)
+*
+* Input stage
+Rin inp inn 1T
+Vos inp inp_os DC 0.002
+*
+* Gain stage: Aol=100000, pole at 10.0Hz → GBW=1.0MHz
+E1 int 0 inp_os inn 100000
+R1 int out_int 1
+C1 out_int 0 15.92m
+*
+* Output stage with rail clamping
+* Output swing: 1.5V from rails
+Dhigh out_int vcc_int DLIMIT
+Dlow vee_int out_int DLIMIT
+Vswh vcc vcc_int DC 1.5
+Vswl vee_int vee DC 1.5
+.model DLIMIT D(IS=1e-14 N=0.1)
+Eout out 0 out_int 0 1
+.ends OPAMP_MY_OPAMP
+
