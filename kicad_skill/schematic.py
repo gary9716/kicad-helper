@@ -915,12 +915,19 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
         defn = local_definitions.get(lib_id)
         local_bbox = get_symbol_local_bbox(defn) if defn else None
         
+        raw_x = placement.get('x', 100.0)
+        raw_y = placement.get('y', 100.0)
+        x = round(raw_x / 1.27) * 1.27
+        y = round(raw_y / 1.27) * 1.27
+        if abs(x - raw_x) > 1e-4 or abs(y - raw_y) > 1e-4:
+            print(f"Note: Snapping symbol {placement['reference']} placement from ({raw_x}, {raw_y}) to grid ({x:.3f}, {y:.3f})")
+
         inst = create_symbol_instance_sexpr(
             lib_id=lib_id,
             reference=placement['reference'],
             value=placement['value'],
-            x=placement.get('x', 100.0),
-            y=placement.get('y', 100.0),
+            x=x,
+            y=y,
             angle=placement.get('angle', 0.0),
             properties_dict=placement.get('properties'),
             local_bbox=local_bbox,

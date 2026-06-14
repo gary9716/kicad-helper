@@ -150,3 +150,43 @@ You can also pass custom schematic, PCB, and output paths:
 Upon completion, a detailed markdown report is generated at:
 * [design_review_report.md](file:///Users/gary/hardwares/underwater-machine/schematic/analysis/design_review_report.md)
 
+---
+
+## 📐 Programmatic Schematic & Library Generation Guidelines
+
+When generating KiCad schematics (`.kicad_sch`) or library files (`.kicad_sym`) programmatically, adhere to the following rules to prevent connectivity issues, syntax errors, and ERC/DRC failures:
+
+### 1. Grid Snapping
+KiCad schematics use a strict **50-mil (1.27 mm) grid** for pins, wires, junctions, and labels. Programmatically generated positions must be snapped to multiples of `1.27 mm` to ensure KiCad recognizes connections.
+* **Math Snapping Function**:
+  ```python
+  def snap_to_grid(val):
+      return round(val / 1.27) * 1.27
+  ```
+* **Wire/Label Snap**: A wire must connect *exactly* to a pin's absolute coordinate and extend horizontally or vertically, snapping its other end (and any label placed there) to the 50-mil grid.
+
+### 2. Coordinate Systems & Y-Axis Inversion
+* **Symbol Library (`.kicad_sym`)**: Uses math convention (**Y-Up**, positive Y is upwards).
+* **Schematic File (`.kicad_sch`)**: Uses screen convention (**Y-Down**, positive Y is downwards).
+* **Placement Formulas**:
+  * For relative pin offsets `(pin_x, pin_y)` inside a library symbol placed at `(symbol_x, symbol_y)` in the schematic:
+    * `absolute_pin_x = symbol_x + pin_x`
+    * `absolute_pin_y = symbol_y - pin_y` (Note the subtraction to invert Y-axis coordinate convention).
+  * For reference designators and values:
+    * `ref_y = symbol_y - bbox_max_y - 2.54`
+    * `val_y = symbol_y - bbox_min_y + 2.54`
+
+### 3. Symbol Library Setup & Naming
+* **Library Name Registration**: When using custom symbols like `MyLibrary:MySymbol`, the library name `MyLibrary` must be registered in the project's local `sym-lib-table` pointing to the physical `.kicad_sym` file (e.g. `(uri "${KIPRJMOD}/MyLibrary.kicad_sym")`).
+* **S-Expression Formats**:
+  * **In `sym-lib-table`**: Register the library with its name and type.
+  * **In `.kicad_sym`**: The symbol header must omit the library name prefix: `(symbol "MySymbol" ...)`.
+  * **In `lib_symbols` section of `.kicad_sch`**: The symbol header must include the library prefix: `(symbol "MyLibrary:MySymbol" ...)`.
+* **Sub-Symbol Unit Naming**: Standard sub-symbols (units) inside a parent symbol must follow strict suffix conventions:
+  * Graphical/Background units: `"{symbol_name}_0_1"` (often contains background shape).
+  * Pin/Functional units: `"{symbol_name}_1_1"` (contains functional pins for Unit 1, Style 1).
+  * Do NOT use custom prefixes/names for these units that violate the `SymbolName_Unit_Style` template, or KiCad will fail to load the schematic with "Invalid symbol unit name prefix" errors.
+
+### 4. Electrical Pin Types for Buses
+* **Shared Bus Outputs**: Pin electrical types for shared bus drivers (e.g., MISO pins on multiple SPI slave modules connected to the same MCU MISO line) must be defined as `tri_state` (or `passive` if necessary), but **never** as `output`. Defining them as `output` will cause KiCad's Electrical Rules Checker (ERC) to report conflicting push-pull output connections.
+* **Electrical Type Syntax**: Valid electrical types for pins are `input`, `output`, `bidirectional`, `tri_state`, `passive`, `free`, `unspecified`, `power_in`, `power_out`, `open_collector`, `open_emitter`. Do NOT wrap these strings in double quotes inside the S-expression pin statement (e.g., use `(pin input line ...)` instead of `(pin "input" line ...)`).

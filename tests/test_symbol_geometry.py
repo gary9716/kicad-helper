@@ -85,5 +85,26 @@ class TestSymbolGeometry(unittest.TestCase):
         self.assertAlmostEqual(global_bbox_90.ymin, 190)
         self.assertAlmostEqual(global_bbox_90.ymax, 210)
 
+    def test_invalid_pin_type(self):
+        pins = [
+            {"side": "left", "number": "1", "name": "VCC", "type": "power_in_invalid_type"}
+        ]
+        with self.assertRaises(ValueError):
+            generate_symbol_sexpr("TEST_INVALID", pins)
+
+    def test_miso_pin_output_conflict(self):
+        pins = [
+            {"side": "left", "number": "1", "name": "SPI_MISO", "type": "output"}
+        ]
+        with self.assertRaises(ValueError):
+            generate_symbol_sexpr("TEST_MISO_CONF", pins)
+
+        # Should pass if type is tri_state
+        pins_ok = [
+            {"side": "left", "number": "1", "name": "SPI_MISO", "type": "tri_state"}
+        ]
+        symbol = generate_symbol_sexpr("TEST_MISO_OK", pins_ok)
+        self.assertEqual(symbol[1], "TEST_MISO_OK")
+
 if __name__ == "__main__":
     unittest.main()

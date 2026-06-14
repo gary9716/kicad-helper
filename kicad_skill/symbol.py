@@ -11,6 +11,35 @@ def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, height=None, 
     ]
     Sides: 'left', 'right', 'top', 'bottom'.
     """
+    # Validate pin definitions
+    VALID_PIN_TYPES = {
+        "input", "output", "bidirectional", "tri_state", "passive",
+        "free", "unspecified", "power_in", "power_out", 
+        "open_collector", "open_emitter"
+    }
+    
+    for p in pins:
+        pin_name = p.get("name")
+        pin_num = p.get("number")
+        pin_type = p.get("type", "unspecified")
+        
+        if not pin_name or not pin_num:
+            raise ValueError(f"Pin definitions must contain both 'name' and 'number'. Got: {p}")
+            
+        if pin_type not in VALID_PIN_TYPES:
+            raise ValueError(
+                f"Invalid pin type '{pin_type}' for pin '{pin_name}'. "
+                f"Must be one of: {', '.join(sorted(VALID_PIN_TYPES))}"
+            )
+            
+        # Check for MISO shared bus conflicts
+        if "MISO" in pin_name.upper() and pin_type == "output":
+            raise ValueError(
+                f"Pin '{pin_name}' (number {pin_num}) has type 'output'. "
+                f"For SPI MISO pins on shared buses, you must use 'tri_state' (or 'passive') "
+                f"to prevent KiCad ERC conflicts."
+            )
+
     # Group pins by side
     left_pins = [p for p in pins if p.get("side", "left") == "left"]
     right_pins = [p for p in pins if p.get("side", "left") == "right"]
