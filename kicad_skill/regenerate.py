@@ -127,3 +127,92 @@ def _emit_labels(sch_path, label_nets, pin_coords):
             sexpr.append(_make_label(net["name"], xy[0], xy[1]))
     with open(sch_path, "w", encoding="utf-8") as f:
         f.write(format_sexpr(sexpr))
+
+
+def _placements_from_components(components):
+    placements = []
+    for ref, c in sorted(components.items()):
+        placements.append({
+            "lib_id": c["lib_id"],
+            "reference": ref,
+            "value": c.get("value", ""),
+            "x": float(c.get("x", 0.0)),
+            "y": float(c.get("y", 0.0)),
+            "angle": float(c.get("angle", 0.0)),
+        })
+    # Auto-row fallback for components without coords: spread along a row.
+    col = 0
+    for p in placements:
+        if p["x"] == 0.0 and p["y"] == 0.0:
+            p["x"] = 50.0 + col * 25.4
+            p["y"] = 100.0
+            col += 1
+    return placements
+
+
+def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None):
+    """Build a clean flat schematic from the ground-truth netlist.
+
+    Returns (out_sch, report). Raises if a fatal report survives the
+    all-labels configuration (GT/geometry contradiction).
+    """
+    gt = load_ground_truth(gt_path)
+    nets, components = load_gt_components(gt)
+    placements = _placements_from_components(components)
+
+    forced_labels = set()  # net names demoted from wire to label after a short/open
+    if max_iter is None:
+        max_iter = len(nets) + 1
+
+    for _ in range(max_iter):
+        _write_blank_schematic(out_sch)
+        place_symbols_and_resolve(out_sch, table_path, placements, margin=2.54, resolve=True)
+        coords = _pin_coords(out_sch, table_path)
+        centers = _centers_from_schematic(out_sch)
+
+        label_nets, wire_nets = classify_nets(nets, centers)
+        # Apply demotions from previous iterations.
+        demoted = [n for n in wire_nets if n["name"] in forced_labels]
+        wire_nets = [n for n in wire_nets if n["name"] not in forced_labels]
+        label_nets = label_nets + demoted
+
+        _emit_labels(out_sch, label_nets, coords)
+        for net in wire_nets:
+            a, b = net["pins"]
+            connect_symbols_in_schematic(out_sch, table_path, [{"from": a, "to": b}], orthogonal=True)
+
+        actual = extract_actual_netlist(out_sch, table_path)
+        rep = compare(actual, nets)
+        if not rep["fatal"]:
+            return out_sch, rep
+
+        # Demote every wire-net implicated in a short/open and retry.
+        offenders = {n for s in rep["shorts"] for n in s["gt_nets"]}
+        offenders |= {o["gt_net"] for o in rep["opens"]}
+        wire_names = {n["name"] for n in wire_nets}
+        newly = offenders & wire_names
+        if not newly:
+            raise RuntimeError(f"regenerate failed: fatal report not fixable by label demotion: {rep}")
+        forced_labels |= newly
+
+    raise RuntimeError("regenerate did not converge")
+
+
+def _centers_from_schematic(sch_path):
+    """Return {ref: (x, y)} symbol placement centers from a schematic."""
+    with open(sch_path, "r", encoding="utf-8") as f:
+        sexpr = parse_sexpr(f.read())
+    centers = {}
+    for child in sexpr[1:]:
+        if not isinstance(child, list) or not child or child[0] != "symbol":
+            continue
+        ref, at = "", None
+        for sub in child[1:]:
+            if isinstance(sub, list) and len(sub) > 1:
+                if sub[0] == "property" and len(sub) > 2 and sub[1] == "Reference":
+                    ref = sub[2]
+                elif sub[0] == "at":
+                    at = (float(sub[1]), float(sub[2]))
+        if ref and at:
+            centers[ref] = at
+    return centers

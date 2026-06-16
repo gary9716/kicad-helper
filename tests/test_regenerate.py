@@ -101,3 +101,29 @@ class TestLabelEmission(unittest.TestCase):
         rep = compare(actual, [{"name": "VDD", "pins": ["U1:5", "U2:18"]}])
         self.assertFalse(rep["fatal"], rep)
         self.assertEqual(rep["opens"], [])
+
+
+from kicad_skill.regenerate import regenerate_schematic
+
+
+class TestRegenerateIntegration(unittest.TestCase):
+    def setUp(self):
+        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.table = os.path.join(self.base, "sym-lib-table")
+        self.gt = os.path.join(self.base, "can_node.groundtruth.json")
+        if not os.path.exists(self.table) or not os.path.exists(self.gt):
+            self.skipTest("mcp_test artifacts not present")
+        self.out = os.path.join(self.base, "_regen_test.kicad_sch")
+        self.addCleanup(lambda: os.path.exists(self.out) and os.remove(self.out))
+
+    def test_regenerated_schematic_has_no_short_or_open(self):
+        out_path, rep = regenerate_schematic(self.gt, self.table, self.out)
+        self.assertFalse(rep["fatal"], f"report still fatal: {rep}")
+        self.assertEqual(rep["shorts"], [])
+        self.assertEqual(rep["opens"], [])
+
+    def test_regenerated_schematic_is_flat(self):
+        regenerate_schematic(self.gt, self.table, self.out)
+        with open(self.out) as f:
+            content = f.read()
+        self.assertNotIn("(sheet ", content)
