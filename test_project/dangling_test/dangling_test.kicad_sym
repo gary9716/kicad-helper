@@ -1,0 +1,122 @@
+(kicad_symbol_lib
+	(version 20200827)
+	(generator "kicad_symbol_editor")
+	(symbol "MY_RESISTOR"
+		(pin_names
+			(offset 1.016)
+		)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "R"
+			(at -5.08 -5.08 0)
+			(effects (font (size 1.27 1.27)) (justify left))
+		)
+		(property "Value" "MY_RESISTOR"
+			(at -5.08 5.08 0)
+			(effects (font (size 1.27 1.27)) (justify left))
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(symbol "MY_RESISTOR_0_1"
+			(rectangle
+				(start -5.08 -2.54)
+				(end 5.08 2.54)
+				(stroke (width 0.254) (type default))
+				(fill (type background))
+			)
+		)
+		(symbol "MY_RESISTOR_1_1"
+			(pin passive line
+				(at -7.62 0.00 0)
+				(length 2.54)
+				(name "1"
+					(effects (font (size 1.27 1.27)))
+				)
+				(number "1"
+					(effects (font (size 1.27 1.27)))
+				)
+			)
+			(pin output line
+				(at 7.62 0.00 180)
+				(length 2.54)
+				(name "2"
+					(effects (font (size 1.27 1.27)))
+				)
+				(number "2"
+					(effects (font (size 1.27 1.27)))
+				)
+			)
+		)
+	)
+	(symbol "MY_CAPACITOR"
+		(pin_names
+			(offset 1.016)
+		)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "C"
+			(at -5.08 -5.08 0)
+			(effects (font (size 1.27 1.27)) (justify left))
+		)
+		(property "Value" "MY_CAPACITOR"
+			(at -5.08 5.08 0)
+			(effects (font (size 1.27 1.27)) (justify left))
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(effects
+				(font (size 1.27 1.27))
+				(hide yes)
+			)
+		)
+		(symbol "MY_CAPACITOR_0_1"
+			(rectangle
+				(start -5.08 -2.54)
+				(end 5.08 2.54)
+				(stroke (width 0.254) (type default))
+				(fill (type background))
+			)
+		)
+		(symbol "MY_CAPACITOR_1_1"
+			(pin input line
+				(at -7.62 0.00 0)
+				(length 2.54)
+				(name "1"
+					(effects (font (size 1.27 1.27)))
+				)
+				(number "1"
+					(effects (font (size 1.27 1.27)))
+				)
+			)
+			(pin passive line
+				(at 7.62 0.00 180)
+				(length 2.54)
+				(name "2"
+					(effects (font (size 1.27 1.27)))
+				)
+				(number "2"
+					(effects (font (size 1.27 1.27)))
+				)
+			)
+		)
+	)
+)
