@@ -1,0 +1,26 @@
+{
+  "design": "mcp2515_can_node",
+  "references": [
+    "Microchip MCP2515 DS20001801 (pin functions)",
+    "NXP TJA1050 datasheet (pin functions, RS=GND high-speed)",
+    "github.com/yasir-shahzad/MCP2515-CAN-Bus-Module images/Schematic.png (topology: RESET pull-up, crystal load caps, 120R termination, decoupling)"
+  ],
+  "confirmed_by": "user (2026-06-16), per-net via plan-ground-truth-netlist",
+  "nets": [
+    {"name": "VDD",      "pins": ["U1:5", "U2:18", "U3:3", "R1:2", "C3:1", "C4:1", "J1:1"], "source": "datasheet power pins + reference rail; J1:1 user-confirmed", "trust": "high", "status": "confirmed"},
+    {"name": "GND",      "pins": ["U1:6", "U2:9", "U3:2", "U3:8", "C1:2", "C2:2", "C3:2", "C4:2", "J1:2"], "source": "datasheet; RS(U3:8)->GND high-speed; J1:2 user-confirmed", "trust": "high", "status": "confirmed"},
+    {"name": "SPI_CS",   "pins": ["U1:1", "U2:16"], "source": "datasheet SPI pinout", "trust": "high", "status": "confirmed"},
+    {"name": "SPI_MOSI", "pins": ["U1:2", "U2:14"], "source": "datasheet (MOSI->SI)", "trust": "high", "status": "confirmed"},
+    {"name": "SPI_MISO", "pins": ["U1:3", "U2:15"], "source": "datasheet (MISO->SO)", "trust": "high", "status": "confirmed"},
+    {"name": "SPI_SCK",  "pins": ["U1:4", "U2:13"], "source": "datasheet SPI pinout", "trust": "high", "status": "confirmed"},
+    {"name": "RESET",    "pins": ["U2:17", "R1:1"], "source": "reference 10K pull-up to VDD", "trust": "high", "status": "confirmed"},
+    {"name": "OSC1",     "pins": ["U2:8", "Y1:1", "C1:1"], "source": "reference crystal + load cap", "trust": "high", "status": "confirmed"},
+    {"name": "OSC2",     "pins": ["U2:7", "Y1:2", "C2:1"], "source": "reference crystal + load cap", "trust": "high", "status": "confirmed"},
+    {"name": "TXCAN",    "pins": ["U2:1", "U3:1"], "source": "datasheet TXCAN->TXD straight-through", "trust": "high", "status": "confirmed"},
+    {"name": "RXCAN",    "pins": ["U2:2", "U3:4"], "source": "datasheet RXCAN->RXD straight-through", "trust": "high", "status": "confirmed"},
+    {"name": "CANH",     "pins": ["U3:7", "R2:1", "J1:3"], "source": "reference 120R termination; J1:3 user-confirmed", "trust": "high", "status": "confirmed"},
+    {"name": "CANL",     "pins": ["U3:6", "R2:2", "J1:4"], "source": "reference 120R termination; J1:4 user-confirmed", "trust": "high", "status": "confirmed"}
+  ],
+  "no_connect": [],
+  "unresolved": []
+}
