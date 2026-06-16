@@ -131,17 +131,35 @@ def _pin_coords(sch_path, table_path):
     return coords
 
 
-def _make_label(name, x, y):
+def _label_orientation(px, py, cx, cy):
+    """Return (angle, justify) so a label at a pin grows AWAY from the symbol body.
+
+    The pin's side is the dominant axis of (pin - symbol_center). KiCad label
+    justify sets which side of the anchor the text occupies; combined with the
+    angle this points the text outward (off the body and off neighbouring pins).
+    The anchor itself stays on the pin so the label still connects.
+    """
+    dx, dy = px - cx, py - cy
+    if abs(dx) >= abs(dy):
+        # Horizontal pin: text grows left (off a left-side pin) or right.
+        return (0, "right") if dx < 0 else (0, "left")
+    # Vertical pin: text grows up (off a top-side pin) or down.
+    return (90, "left") if dy < 0 else (90, "right")
+
+
+def _make_label(name, x, y, angle=0, justify="left"):
     return [
         "label", name,
-        ["at", f"{x:.3f}", f"{y:.3f}", "0"],
-        ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", "left", "bottom"]],
+        ["at", f"{x:.3f}", f"{y:.3f}", str(angle)],
+        ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", justify]],
         ["uuid", str(uuid.uuid4())],
     ]
 
 
 def _emit_labels(sch_path, label_nets, pin_coords):
-    """Insert a local label at each pin coordinate of each label-net."""
+    """Insert a local label at each pin coordinate of each label-net, oriented so
+    the text radiates away from the owning symbol's body."""
+    centers = _centers_from_schematic(sch_path)
     with open(sch_path, "r", encoding="utf-8") as f:
         sexpr = parse_sexpr(f.read())
     for net in label_nets:
@@ -150,7 +168,9 @@ def _emit_labels(sch_path, label_nets, pin_coords):
             xy = pin_coords.get((ref, num))
             if xy is None:
                 raise ValueError(f"pin {pin} not found among placed symbols")
-            sexpr.append(_make_label(net["name"], xy[0], xy[1]))
+            cx, cy = centers.get(ref, xy)
+            angle, justify = _label_orientation(xy[0], xy[1], cx, cy)
+            sexpr.append(_make_label(net["name"], xy[0], xy[1], angle, justify))
     with open(sch_path, "w", encoding="utf-8") as f:
         f.write(format_sexpr(sexpr))
 

@@ -86,6 +86,30 @@ class TestClassifyNets(unittest.TestCase):
         self.assertEqual(wire, [])
 
 
+from kicad_skill.regenerate import _label_orientation
+
+
+class TestLabelOrientation(unittest.TestCase):
+    """Label text must radiate OUTWARD from the symbol body so it does not overlap
+    the body or neighbouring pin text. The anchor stays on the pin (KiCad needs
+    the exact pin coordinate to connect); only angle + justify change.
+    """
+
+    def test_left_side_pin_text_grows_left(self):
+        # pin left of center -> horizontal label, text grows left (justify right)
+        self.assertEqual(_label_orientation(0.0, 5.0, 10.0, 5.0), (0, "right"))
+
+    def test_right_side_pin_text_grows_right(self):
+        self.assertEqual(_label_orientation(20.0, 5.0, 10.0, 5.0), (0, "left"))
+
+    def test_top_side_pin_text_grows_up(self):
+        # pin above center (smaller y, KiCad Y-down) -> vertical label growing up
+        self.assertEqual(_label_orientation(5.0, 0.0, 5.0, 10.0), (90, "left"))
+
+    def test_bottom_side_pin_text_grows_down(self):
+        self.assertEqual(_label_orientation(5.0, 20.0, 5.0, 10.0), (90, "right"))
+
+
 import tempfile
 import shutil
 from kicad_skill.regenerate import (
