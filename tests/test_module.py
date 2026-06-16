@@ -147,7 +147,25 @@ class TestModuleCreation(unittest.TestCase):
             res = evaluate_schematic_layout(path, self.table_path)
             self.assertEqual(res["shorts"], 0, f"shorts in {os.path.basename(path)}: {res['issues']}")
             self.assertEqual(res["dangling"], 0, f"dangling in {os.path.basename(path)}: {res['issues']}")
+            self.assertEqual(res["duplicate_wires"], 0,
+                             f"duplicate wires in {os.path.basename(path)}: {res['issues']}")
             self.assertFalse(res["fatal"], f"fatal in {os.path.basename(path)}")
+
+    def test_evaluator_detects_duplicate_wires(self):
+        """The evaluator must flag exact-duplicate wire segments and drop below 100, so an
+        AI caller cannot mistake a wire-littered schematic for a clean one."""
+        dup_path = os.path.join(self.test_dir.name, "dup.kicad_sch")
+        with open(dup_path, "w", encoding="utf-8") as f:
+            f.write("""(kicad_sch
+  (version 20211123) (generator "eeschema") (generator_version "10.0")
+  (uuid "u") (paper "A4")
+  (wire (pts (xy 100.33 100.33) (xy 110.49 100.33)) (stroke (width 0) (type default)) (uuid "w1"))
+  (wire (pts (xy 100.33 100.33) (xy 110.49 100.33)) (stroke (width 0) (type default)) (uuid "w2"))
+)
+""")
+        res = evaluate_schematic_layout(dup_path, self.table_path)
+        self.assertEqual(res["duplicate_wires"], 1)
+        self.assertLess(res["score"], 100)
 
 if __name__ == "__main__":
     unittest.main()

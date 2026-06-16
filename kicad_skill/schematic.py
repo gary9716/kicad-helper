@@ -1081,6 +1081,37 @@ def make_wire_sexpr(x1, y1, x2, y2):
     ]
 
 
+def _wire_grid_endpoints(wire_node, grid=1.27):
+    """Return a frozenset of the wire's two grid-snapped endpoints, or None."""
+    pts = next((s for s in wire_node[1:] if isinstance(s, list) and s[0] == 'pts'), None)
+    if not pts:
+        return None
+    cs = [(float(a[1]), float(a[2])) for a in pts[1:]
+          if isinstance(a, list) and len(a) > 2 and a[0] == 'xy']
+    if len(cs) < 2:
+        return None
+    a = (int(round(cs[0][0] / grid)), int(round(cs[0][1] / grid)))
+    b = (int(round(cs[-1][0] / grid)), int(round(cs[-1][1] / grid)))
+    return frozenset((a, b))
+
+
+def dedupe_wire_children(children):
+    """Drop wire nodes whose (unordered, grid-snapped) endpoints duplicate an earlier wire.
+    Identical overlapping segments are always redundant; keep the first, drop the rest.
+    Operates on a list of child nodes (no root tag)."""
+    seen = set()
+    out = []
+    for ch in children:
+        if isinstance(ch, list) and ch and ch[0] == 'wire':
+            ep = _wire_grid_endpoints(ch)
+            if ep is not None:
+                if ep in seen:
+                    continue
+                seen.add(ep)
+        out.append(ch)
+    return out
+
+
 def get_wire_grid_points(x1, y1, x2, y2, grid_size=1.27):
     pts = []
     gx1 = int(round(x1 / grid_size))
@@ -1390,9 +1421,12 @@ def connect_symbols_in_schematic(schematic_path, table_path, connections, orthog
             new_wires.append(w)
             sch_sexpr.append(w)
             
+    # Drop any exact-duplicate wire segments produced while routing multi-pin nets.
+    sch_sexpr = [sch_sexpr[0]] + dedupe_wire_children(sch_sexpr[1:])
+
     # Save schematic
     with open(schematic_path, 'w', encoding='utf-8') as f:
         f.write(format_sexpr(sch_sexpr))
-        
+
     return len(new_wires)
 

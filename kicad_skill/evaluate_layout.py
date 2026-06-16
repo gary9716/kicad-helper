@@ -427,10 +427,27 @@ def evaluate_schematic_layout(sch_path, table_path):
                 if dangling_count <= 10:
                     issues.append(f"[DANGLING] Wire end at grid {pt} connects to nothing")
 
+    # --- CHECK 8: Duplicate wire segments (redundant "extra" wires) ---
+    # Two wires with the same endpoints are visually messy ("線多") even though they are
+    # electrically harmless, so they must keep the score below 100.
+    seg_seen = {}
+    duplicate_wires = 0
+    for (a, b) in gsegs:
+        if a == b:
+            continue
+        key = frozenset((a, b))
+        seg_seen[key] = seg_seen.get(key, 0) + 1
+        if seg_seen[key] >= 2:
+            duplicate_wires += 1
+            if duplicate_wires <= 10:
+                issues.append(f"[DUPLICATE] Redundant overlapping wire segment at {tuple(sorted(key))}")
+
     if short_count > 0:
         deductions += min(short_count * 15, 100)
     if dangling_count > 0:
         deductions += min(dangling_count * 10, 100)
+    if duplicate_wires > 0:
+        deductions += min(duplicate_wires * 5, 20)
 
     score = max(100 - deductions, 0)
 
@@ -456,6 +473,7 @@ def evaluate_schematic_layout(sch_path, table_path):
         "overlaps_count": overlaps_count,
         "unconnected_pins_count": unconnected_pins_count,
         "complex_wires_count": complex_wires_count,
+        "duplicate_wires": duplicate_wires,
         "shorts": short_count,
         "dangling": dangling_count,
         "issues": issues
@@ -474,6 +492,7 @@ if __name__ == "__main__":
     print(f"------------------------------------------")
     print(f"Net shorts (FATAL):     {res.get('shorts', 0)}")
     print(f"Dangling wires (FATAL): {res.get('dangling', 0)}")
+    print(f"Duplicate wires:        {res.get('duplicate_wires', 0)}")
     print(f"Wire complexity total: {res.get('wire_complexity_total', 0.0):.1f}")
     print(f"Off-grid elements:      {res.get('grid_errors', 0)}")
     print(f"Symbol overlaps:        {res.get('overlaps_count', 0)}")

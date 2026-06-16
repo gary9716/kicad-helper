@@ -11,6 +11,7 @@ from .schematic import (
     transform_pin_coordinate,
     find_orthogonal_path,
     make_wire_sexpr,
+    dedupe_wire_children,
     BoundingBox
 )
 
@@ -647,6 +648,7 @@ def create_module_from_components(schematic_path, table_path, components, module
             if at:
                 sub_connector_gks.add(grid_key(float(at[1]), float(at[2])))
     prune_dangling_wires(sub_sch_children, sub_connector_gks)
+    sub_sch_children = [sub_sch_children[0]] + dedupe_wire_children(sub_sch_children[1:])
 
     # Save child schematic
     with open(sub_sch_path, 'w', encoding='utf-8') as f:
@@ -900,6 +902,7 @@ def create_module_from_components(schematic_path, table_path, components, module
                     if at:
                         parent_connector_gks.add(grid_key(float(at[1]), float(at[2])))
     prune_dangling_wires(parent_children, parent_connector_gks)
+    parent_children = dedupe_wire_children(parent_children)
 
     # Save parent schematic back
     sch_sexpr = [sch_sexpr[0]] + parent_children
