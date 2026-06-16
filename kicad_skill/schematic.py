@@ -1055,7 +1055,13 @@ def find_pin_local_data(symbol_def, pin_ref):
 def transform_pin_coordinate(px, py, tx, ty, angle, mirror_x=False, mirror_y=False):
     """
     Transforms local pin coordinates to global schematic coordinates.
+
+    Symbol-library pin coordinates use a Y-up convention; the schematic canvas is
+    Y-down. KiCad applies this inherent vertical flip when instantiating a symbol,
+    so we negate py before mirror/rotation. Without it, every pin lands mirrored
+    about the symbol's origin and KiCad ERC reports the pins/labels unconnected.
     """
+    py = -py
     if mirror_x:
         px = -px
     if mirror_y:
