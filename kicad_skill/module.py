@@ -176,6 +176,17 @@ def prune_dangling_wires(children, connector_gks):
         children[:] = [c for c in children if not (isinstance(c, list) and id(c) in remove_ids)]
 
 
+def _set_symbol_instance_path(inst, project_name, path, reference):
+    """Replace a symbol instance's `instances` block so its hierarchical path is
+    correct for the sheet it now lives on. For a symbol moved into a sub-sheet the
+    path is `/<root_uuid>/<sheet_instance_uuid>`; without it KiCad does not place
+    the symbol on the sheet instance and ERC reports its pins unconnected."""
+    inst[:] = [s for s in inst if not (isinstance(s, list) and s and s[0] == 'instances')]
+    inst.append(['instances',
+                 ['project', project_name,
+                  ['path', path, ['reference', reference], ['unit', '1']]]])
+
+
 def create_module_from_components(schematic_path, table_path, components, module_name, sheet_file_name):
     project_dir = os.path.dirname(os.path.abspath(schematic_path))
     lib_map = load_sym_lib_table(table_path)
@@ -187,6 +198,17 @@ def create_module_from_components(schematic_path, table_path, components, module
 
     if not sch_sexpr or sch_sexpr[0] != 'kicad_sch':
         raise ValueError(f"Invalid KiCad schematic file {schematic_path}")
+
+    # Root sheet uuid + project name + the new sheet instance uuid drive the
+    # hierarchical instance paths of everything moved into the sub-sheet.
+    root_uuid = next((c[1] for c in sch_sexpr[1:]
+                      if isinstance(c, list) and c and c[0] == 'uuid'), None)
+    if root_uuid is None:
+        root_uuid = str(uuid.uuid4())
+        sch_sexpr.insert(1, ['uuid', root_uuid])
+    project_name = os.path.splitext(os.path.basename(schematic_path))[0]
+    sheet_uuid = str(uuid.uuid4())
+    sub_instance_path = f"/{root_uuid}/{sheet_uuid}"
 
     # Parse symbol definitions
     lib_symbols = []
@@ -562,6 +584,7 @@ def create_module_from_components(schematic_path, table_path, components, module
     for ref, inst in moved_instances.items():
         inst_copy = parse_sexpr(format_sexpr(inst['sexpr'])) # deep copy
         shift_coordinates(inst_copy, dx, dy)
+        _set_symbol_instance_path(inst_copy, project_name, sub_instance_path, ref)
         sub_sch_children.append(inst_copy)
 
     # Move wires and shift them
@@ -687,7 +710,6 @@ def create_module_from_components(schematic_path, table_path, components, module
     # Sheet position centered where the old components were
     sheet_x = round((cx - sheet_w / 2) / 1.27) * 1.27
     sheet_y = round((cy - sheet_h / 2) / 1.27) * 1.27
-    sheet_uuid = str(uuid.uuid4())
 
     # Create sheet pins S-expression
     sheet_pins_sexpr = []
@@ -747,6 +769,10 @@ def create_module_from_components(schematic_path, table_path, components, module
         ]
     ]
     sheet_node.extend(sheet_pins_sexpr)
+    # Register the sheet instance on the root sheet path (page 2), mirroring KiCad.
+    sheet_node.append(['instances',
+                       ['project', project_name,
+                        ['path', f"/{root_uuid}", ['page', '2']]]])
     parent_children.append(sheet_node)
 
     # 9. Route parent wires to connect outside elements to sheet pins
