@@ -25,7 +25,7 @@ class TestWiringNeedsLabel(unittest.TestCase):
     def setUp(self):
         if find_kicad_cli() is None:
             self.skipTest("kicad-cli not installed")
-        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
         self.table = os.path.join(self.base, "sym-lib-table")
         if not os.path.exists(self.table):
             self.skipTest("mcp_test sym-lib-table not present (run the demo first)")

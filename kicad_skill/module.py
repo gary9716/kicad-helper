@@ -176,6 +176,198 @@ def prune_dangling_wires(children, connector_gks):
         children[:] = [c for c in children if not (isinstance(c, list) and id(c) in remove_ids)]
 
 
+# ---- Net-label placement (collision-aware) -------------------------------------
+# A label anchored straight on a pin overlaps the pin name, the symbol reference /
+# value, and neighbouring labels. These helpers orient the text away from the body
+# and push it outward (with a stub wire back to the pin) until its AABB clears every
+# obstacle, so the rendered schematic stays readable.
+_LABEL_CHAR_W = 1.1    # mm per character at 1.27 mm font (KiCad glyphs ~0.85*size wide)
+_LABEL_GAP = 2.54      # breathing room + the hierarchical-label flag/arrow graphic
+_TEXT_H = 2.2          # label text height incl. padding
+
+
+def _boxes_overlap(a, b):
+    return a.xmin < b.xmax and a.xmax > b.xmin and a.ymin < b.ymax and a.ymax > b.ymin
+
+
+def _label_orientation(px, py, cx, cy):
+    """(angle, justify) so a label at a pin grows AWAY from the symbol body."""
+    dx, dy = px - cx, py - cy
+    if abs(dx) >= abs(dy):
+        return (0, "right") if dx < 0 else (0, "left")
+    return (90, "left") if dy < 0 else (90, "right")
+
+
+def _label_text_box(text, x, y, angle, justify):
+    """Approx AABB of a label's text box anchored at (x, y)."""
+    w = max(1, len(text)) * _LABEL_CHAR_W + _LABEL_GAP
+    h = _TEXT_H
+    if angle == 90:
+        if justify == "left":      # vertical text growing up (-y)
+            return BoundingBox(x - h / 2, y - w, x + h / 2, y)
+        if justify == "right":     # growing down (+y)
+            return BoundingBox(x - h / 2, y, x + h / 2, y + w)
+        return BoundingBox(x - h / 2, y - w / 2, x + h / 2, y + w / 2)
+    if justify == "left":          # horizontal text growing right (+x)
+        return BoundingBox(x, y - h / 2, x + w, y + h / 2)
+    if justify == "right":         # growing left (-x)
+        return BoundingBox(x - w, y - h / 2, x, y + h / 2)
+    return BoundingBox(x - w / 2, y - h / 2, x + w / 2, y + h / 2)
+
+
+def _wire_box(p1, p2):
+    """Thin AABB around a wire segment (so labels don't land on top of it)."""
+    return BoundingBox(min(p1[0], p2[0]) - 0.2, min(p1[1], p2[1]) - 0.2,
+                       max(p1[0], p2[0]) + 0.2, max(p1[1], p2[1]) + 0.2)
+
+
+def _property_box(inst, *names):
+    """AABB(es) of a symbol instance's Reference/Value (or other) property text."""
+    boxes = []
+    for sub in inst[1:]:
+        if (isinstance(sub, list) and sub and sub[0] == 'property'
+                and len(sub) > 2 and sub[1] in names):
+            at = next((q for q in sub[1:] if isinstance(q, list) and q[0] == 'at'), None)
+            if at:
+                boxes.append(_label_text_box(str(sub[2]), float(at[1]), float(at[2]), 0, 'left'))
+    return boxes
+
+
+def _resolve_label_pos(name, px, py, cx, cy, obstacles, placed, max_steps=10):
+    """Find a clear anchor for a net label off pin (px,py) of a symbol centred at
+    (cx,cy). Pushes outward along the pin's dominant axis until the text box clears
+    every obstacle + already-placed label, then records the chosen box in `placed`.
+    Returns (anchor_x, anchor_y, angle, justify)."""
+    angle, justify = _label_orientation(px, py, cx, cy)
+    dx, dy = px - cx, py - cy
+    if abs(dx) >= abs(dy):
+        ux, uy = (1.0 if dx >= 0 else -1.0), 0.0
+    else:
+        ux, uy = 0.0, (1.0 if dy >= 0 else -1.0)
+    ax, ay = px, py
+    box = _label_text_box(name, ax, ay, angle, justify)
+    for _ in range(max_steps):
+        if not any(_boxes_overlap(box, o) for o in obstacles) and \
+           not any(_boxes_overlap(box, o) for o in placed):
+            break
+        ax += ux * 1.27
+        ay += uy * 1.27
+        box = _label_text_box(name, ax, ay, angle, justify)
+    placed.append(box)
+    return ax, ay, angle, justify
+
+
+def _symbol_obstacle_box(inst, defn, dx=0.0, dy=0.0, pad=2.54):
+    """AABB of a placed symbol that INCLUDES its pins (and a text-margin pad), so
+    labels are pushed clear of pin numbers / pin names — not just the body graphic.
+    get_symbol_local_bbox covers only the body shapes, so pins are unioned in here."""
+    local_bbox = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
+    tx, ty, a_i, mx_i, my_i = get_symbol_instance_transform(inst)
+    box = get_instance_aabb(local_bbox, tx, ty, a_i, mx_i, my_i)
+    box = BoundingBox(box.xmin, box.ymin, box.xmax, box.ymax)
+    for p in get_symbol_pins_global(inst, defn):
+        box.update_point(p['x'], p['y'])
+    return BoundingBox(box.xmin + dx - pad, box.ymin + dy - pad,
+                       box.xmax + dx + pad, box.ymax + dy + pad)
+
+
+def _update_label_at(node, x, y):
+    """Move a label/hier-label node's anchor, preserving its angle."""
+    for i, s in enumerate(node):
+        if isinstance(s, list) and s and s[0] == 'at':
+            ang = s[3] if len(s) > 3 else '0'
+            node[i] = ['at', f"{x:.3f}", f"{y:.3f}", ang]
+            return
+
+
+def _update_wire_end(wire, x, y):
+    """Move a wire's SECOND endpoint (the label end of a stub)."""
+    pts = next((s for s in wire[1:] if isinstance(s, list) and s and s[0] == 'pts'), None)
+    if pts and len(pts) >= 3:
+        pts[2] = ['xy', f"{x:.3f}", f"{y:.3f}"]
+
+
+def _place_label(children, recs, base_obstacles, vfan, name, px, py, cx, cy, kind, shape):
+    """Place one net label off pin (px,py) of a symbol/sheet centred at (cx,cy).
+
+    Left/right pins get a straight horizontal stub + horizontal label. Top/bottom pins
+    get an L-stub — a staggered vertical riser then a horizontal run — so their labels
+    read horizontally and fan out at different heights instead of forming a vertical
+    comb. The label box is pushed outward clear of base obstacles + already-placed
+    labels; a later _reconcile_labels pass settles overlaps with wires/labels added
+    afterwards. Nodes are appended to `children`; a record is appended to `recs`."""
+    ddx, ddy = px - cx, py - cy
+    riser = None
+    if abs(ddx) >= abs(ddy):
+        ux = 1.0 if ddx >= 0 else -1.0
+        hl_ang, hl_just = (0, 'left') if ux > 0 else (180, 'right')
+        ax, ay = px, py
+        lx, ly = px + ux * 2.54, py
+        rux, ruy = ux, 0.0
+    else:
+        uy = 1.0 if ddy >= 0 else -1.0
+        key = (round(cx, 1), round(cy, 1), uy)
+        idx = vfan.get(key, 0)
+        vfan[key] = idx + 1
+        kx, ky = px, py + uy * (3.81 + idx * 2.54)
+        riser = make_wire_sexpr(px, py, kx, ky)
+        base_obstacles.append(_wire_box((px, py), (kx, ky)))
+        hx = -1.0 if px <= cx else 1.0
+        hl_ang, hl_just = (0, 'left') if hx > 0 else (180, 'right')
+        ax, ay = kx, ky
+        lx, ly = kx + hx * 2.54, ky
+        rux, ruy = hx, 0.0
+    box = _label_text_box(name, lx, ly, 0, hl_just)
+    obstacles = base_obstacles + [r['box'] for r in recs]
+    for _ in range(12):
+        if not any(_boxes_overlap(box, o) for o in obstacles):
+            break
+        lx += rux * 1.27
+        ly += ruy * 1.27
+        box = _label_text_box(name, lx, ly, 0, hl_just)
+    wire = make_wire_sexpr(ax, ay, lx, ly)
+    node = [kind, name]
+    if shape is not None:
+        node.append(['shape', shape])
+    node += [['at', f"{lx:.3f}", f"{ly:.3f}", str(hl_ang)],
+             ['effects', ['font', ['size', '1.27', '1.27']], ['justify', hl_just]],
+             ['uuid', str(uuid.uuid4())]]
+    if riser is not None:
+        children.append(riser)
+    children.append(wire)
+    children.append(node)
+    recs.append({'name': name, 'spx': ax, 'spy': ay, 'ux': rux, 'uy': ruy,
+                 'bx_ang': 0, 'bx_just': hl_just, 'lx': lx, 'ly': ly, 'box': box,
+                 'label_node': node, 'wire_node': wire})
+
+
+def _reconcile_labels(records, base_obstacles, max_passes=6):
+    """Iteratively push any label whose text box overlaps a symbol/text obstacle,
+    another label, or any stub wire (its own excluded) further outward along its pin
+    axis, until nothing overlaps. Mutates each record's label + stub nodes in place."""
+    for _ in range(max_passes):
+        moved = False
+        for r in records:
+            others = list(base_obstacles)
+            for o in records:
+                if o is r:
+                    continue
+                others.append(o['box'])
+                others.append(_wire_box((o['spx'], o['spy']), (o['lx'], o['ly'])))
+            steps = 0
+            while steps < 8 and any(_boxes_overlap(r['box'], o) for o in others):
+                r['lx'] += r['ux'] * 1.27
+                r['ly'] += r['uy'] * 1.27
+                r['box'] = _label_text_box(r['name'], r['lx'], r['ly'], r['bx_ang'], r['bx_just'])
+                steps += 1
+            if steps:
+                moved = True
+                _update_label_at(r['label_node'], r['lx'], r['ly'])
+                _update_wire_end(r['wire_node'], r['lx'], r['ly'])
+        if not moved:
+            break
+
+
 def _set_symbol_instance_path(inst, project_name, path, reference):
     """Replace a symbol instance's `instances` block so its hierarchical path is
     correct for the sheet it now lives on. For a symbol moved into a sub-sheet the
@@ -549,11 +741,29 @@ def create_module_from_components(schematic_path, table_path, components, module
 
         inside_coords_all.update(visited)
 
-    # Filter which elements to move
-    moved_wires_nodes = [w[0] for w in wires if id(w[0]) in inside_wire_ids]
-    moved_junctions_nodes = [j[0] for j in junctions if grid_key(j[1][0], j[1][1]) in inside_coords_all]
-    moved_labels_nodes = [l[0] for l in labels if grid_key(l[2][0], l[2][1]) in inside_coords_all]
-    moved_global_labels_nodes = [gl[0] for gl in global_labels if grid_key(gl[2][0], gl[2][1]) in inside_coords_all]
+    # Filter which elements to move into the sub-sheet. Only fully-internal nets
+    # (every pin inside the module) keep their original regen wiring verbatim — it
+    # is already ERC-clean. Boundary-net wires are NOT moved: cutting a multi-segment
+    # crossing chain leaves inside stub remnants whose endpoints land mid-span on
+    # other nets' wires, and KiCad treats a wire-endpoint-on-wire as a junction —
+    # bridging different nets (e.g. VDD<->GND) into one short. Boundary nets are
+    # rebuilt cleanly below (interconnect inside pins + one hierarchical label).
+    boundary_roots = set(boundary_nets.keys())
+
+    def _wire_root(w):
+        return uf.find(grid_key(w[1][0], w[1][1]))
+
+    moved_wires_nodes = [w[0] for w in wires
+                         if id(w[0]) in inside_wire_ids and _wire_root(w) not in boundary_roots]
+    moved_junctions_nodes = [j[0] for j in junctions
+                             if grid_key(j[1][0], j[1][1]) in inside_coords_all
+                             and uf.find(grid_key(j[1][0], j[1][1])) not in boundary_roots]
+    moved_labels_nodes = [l[0] for l in labels
+                          if grid_key(l[2][0], l[2][1]) in inside_coords_all
+                          and uf.find(grid_key(l[2][0], l[2][1])) not in boundary_roots]
+    moved_global_labels_nodes = [gl[0] for gl in global_labels
+                                 if grid_key(gl[2][0], gl[2][1]) in inside_coords_all
+                                 and uf.find(grid_key(gl[2][0], gl[2][1])) not in boundary_roots]
 
     # Delete crossing wires from parent schematic
     crossing_wire_ids = set(id(w) for w in crossing_wires)
@@ -587,74 +797,81 @@ def create_module_from_components(schematic_path, table_path, components, module
         _set_symbol_instance_path(inst_copy, project_name, sub_instance_path, ref)
         sub_sch_children.append(inst_copy)
 
-    # Move wires and shift them
-    for w_node in moved_wires_nodes:
-        w_copy = parse_sexpr(format_sexpr(w_node))
-        shift_coordinates(w_copy, dx, dy)
-        sub_sch_children.append(w_copy)
+    # NOTE: the original regen wires/junctions/labels are intentionally NOT moved
+    # into the sub-sheet. All intra-module connectivity is rebuilt below purely with
+    # labels (local for fully-internal nets, hierarchical for boundary nets). A label
+    # connects every same-named label by name, with no geometry — so the sub-sheet has
+    # zero wires and therefore zero chance of a stray wire crossing / T-junction short.
 
-    # Move junctions and shift them
-    for j_node in moved_junctions_nodes:
-        j_copy = parse_sexpr(format_sexpr(j_node))
-        shift_coordinates(j_copy, dx, dy)
-        sub_sch_children.append(j_copy)
+    # Fixed obstacles for label placement: symbol bodies (incl. pins + text margin)
+    # and reference/value text. Labels + stub wires are reconciled against each other
+    # in a second pass after all are placed (see _reconcile_labels).
+    sub_base_obstacles = []
+    sub_label_recs = []
+    moved_centers = {}
+    for ref, inst in moved_instances.items():
+        defn = local_definitions.get(inst['lib_id'])
+        local_bbox = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
+        tx, ty, angle_i, mx_i, my_i = get_symbol_instance_transform(inst['sexpr'])
+        body = get_instance_aabb(local_bbox, tx, ty, angle_i, mx_i, my_i)
+        # outward direction uses the body-graphic centre (pin-exclusive, so pins on
+        # one side don't bias it); the obstacle box includes pins + a text margin.
+        moved_centers[ref] = (body.center[0] + dx, body.center[1] + dy)
+        sub_base_obstacles.append(_symbol_obstacle_box(inst['sexpr'], defn, dx, dy))
+        for b in _property_box(inst['sexpr'], 'Reference', 'Value'):
+            sub_base_obstacles.append(BoundingBox(b.xmin + dx, b.ymin + dy,
+                                                  b.xmax + dx, b.ymax + dy))
 
-    # Move labels and shift them
-    for l_node in moved_labels_nodes:
-        l_copy = parse_sexpr(format_sexpr(l_node))
-        shift_coordinates(l_copy, dx, dy)
-        sub_sch_children.append(l_copy)
+    vfan = {}   # (cx,cy,sign(uy)) -> count, to stagger top/bottom-pin riser heights
 
-    # Copy global labels and shift them
-    for gl_node in moved_global_labels_nodes:
-        gl_copy = parse_sexpr(format_sexpr(gl_node))
-        shift_coordinates(gl_copy, dx, dy)
-        sub_sch_children.append(gl_copy)
+    def _emit_sub_label(name, pin, kind, shape):
+        spx, spy = pin['x'] + dx, pin['y'] + dy
+        ocx, ocy = moved_centers.get(pin['ref'], (spx, spy))
+        _place_label(sub_sch_children, sub_label_recs, sub_base_obstacles, vfan,
+                     name, spx, spy, ocx, ocy, kind, shape)
 
-    # Place Hierarchical Labels in sub-schematic
-    # We place each label 5.08mm to the left or right of one of its inside pins
+    def _unique_inside_pins(pin_list):
+        seen, out = set(), []
+        for p in pin_list:
+            gk = grid_key(p['x'] + dx, p['y'] + dy)
+            if gk not in seen:
+                seen.add(gk)
+                out.append(p)
+        return out
+
+    # Boundary nets -> one hierarchical label per inside pin (same name = one net =
+    # one parent sheet pin). The sheet-pin side follows where the outside pins sit.
     net_to_pin_coords = {}
     for root, net_info in boundary_nets.items():
-        # Find one inside pin
-        p = net_info['inside_pins'][0]
-        spx = p['x'] + dx
-        spy = p['y'] + dy
-        # Decide orientation based on average outside pin positions relative to cx
         outside_coords = [grid_to_coord(gk) for gk in net_info['coords'] if gk not in inside_coords_all]
         avg_out_x = sum(c[0] for c in outside_coords) / len(outside_coords) if outside_coords else cx
-        
-        if avg_out_x < cx:
-            # Connects to left, put label 5.08mm to the left
-            lx = spx - 5.08
-            ly = spy
-            angle = 180
-            justify = 'right'
+        net_to_pin_coords[root] = {'side': 'left' if avg_out_x < cx else 'right'}
+        for p in _unique_inside_pins(net_info['inside_pins']):
+            _emit_sub_label(net_info['name'], p, 'hierarchical_label', net_info['type'])
+
+    # Fully-internal nets (every pin inside the module) -> one local label per pin.
+    # Local labels connect by name with no geometry, so a multi-pin internal net needs
+    # no routed wires — keeping the sub-sheet free of any net-crossing wires.
+    for root, N in nets.items():
+        if root in boundary_nets:
+            continue
+        inside_pins = _unique_inside_pins([p for p in N['pins'] if p['ref'] in moved_refs])
+        if len(inside_pins) < 2:
+            continue   # 0/1-pin net: nothing to interconnect
+        if N['labels']:
+            name = N['labels'][0][1]
+        elif N['global_labels']:
+            name = N['global_labels'][0][1]
         else:
-            # Connects to right, put label 5.08mm to the right
-            lx = spx + 5.08
-            ly = spy
-            angle = 0
-            justify = 'left'
+            rp = inside_pins[0]
+            clean = (rp['name'] or rp['number']).replace('/', '_').replace(' ', '_')
+            name = f"{rp['ref']}_{clean}"
+        for p in inside_pins:
+            _emit_sub_label(name, p, 'label', None)
 
-        net_to_pin_coords[root] = {
-            'inside_gx': p['x'],
-            'inside_gy': p['y'],
-            'side': 'left' if avg_out_x < cx else 'right'
-        }
-
-        # Add wire connection between pin and label
-        w_expr = make_wire_sexpr(spx, spy, lx, ly)
-        sub_sch_children.append(w_expr)
-
-        # Add hierarchical label
-        hl_expr = [
-            'hierarchical_label', net_info['name'],
-            ['shape', net_info['type']],
-            ['at', f"{lx:.3f}", f"{ly:.3f}", str(angle)],
-            ['effects', ['font', ['size', '1.27', '1.27']], ['justify', justify]],
-            ['uuid', str(uuid.uuid4())]
-        ]
-        sub_sch_children.append(hl_expr)
+    # Second pass: settle any label whose text now overlaps another label or a stub
+    # wire that was added after it (the cause of labels appearing to sit on a wire).
+    _reconcile_labels(sub_label_recs, sub_base_obstacles)
 
     # Prune crossing-net wire stubs dragged into the sub-sheet (dangling to empty space)
     sub_connector_gks = set()
@@ -678,11 +895,22 @@ def create_module_from_components(schematic_path, table_path, components, module
         f.write(format_sexpr(sub_sch_children))
 
     # 8. Update Parent Schematic
-    # Remove moved symbols, wires, junctions, and labels from parent
+    # Remove moved symbols plus every wire/junction/label of a boundary net. The
+    # parent side of each boundary net is reconnected purely by local labels (below)
+    # named after the net, so all original boundary-net geometry is dropped: leaving
+    # it risks dangling stubs and T-junction bridges (a re-routed corner landing
+    # mid-span on another net's wire shorts them). Fully-outside nets are untouched.
     moved_wire_ids = set(id(w) for w in moved_wires_nodes)
     moved_j_ids = set(id(j) for j in moved_junctions_nodes)
     moved_l_ids = set(id(l) for l in moved_labels_nodes)
     moved_inst_ids = set(id(inst['sexpr']) for inst in moved_instances.values())
+
+    boundary_wire_ids = set(id(w[0]) for w in wires
+                            if uf.find(grid_key(w[1][0], w[1][1])) in boundary_roots)
+    boundary_j_ids = set(id(j[0]) for j in junctions
+                         if uf.find(grid_key(j[1][0], j[1][1])) in boundary_roots)
+    boundary_l_ids = set(id(l[0]) for l in labels
+                         if uf.find(grid_key(l[2][0], l[2][1])) in boundary_roots)
 
     parent_children = []
     for child in sch_sexpr[1:]:
@@ -691,11 +919,13 @@ def create_module_from_components(schematic_path, table_path, components, module
             continue
         if child[0] == 'symbol' and id(child) in moved_inst_ids:
             continue
-        if child[0] == 'wire' and (id(child) in moved_wire_ids or id(child) in crossing_wire_ids):
+        if child[0] == 'wire' and (id(child) in moved_wire_ids
+                                   or id(child) in crossing_wire_ids
+                                   or id(child) in boundary_wire_ids):
             continue
-        if child[0] == 'junction' and id(child) in moved_j_ids:
+        if child[0] == 'junction' and (id(child) in moved_j_ids or id(child) in boundary_j_ids):
             continue
-        if child[0] == 'label' and id(child) in moved_l_ids:
+        if child[0] == 'label' and (id(child) in moved_l_ids or id(child) in boundary_l_ids):
             continue
         parent_children.append(child)
 
@@ -775,119 +1005,55 @@ def create_module_from_components(schematic_path, table_path, components, module
                         ['path', f"/{root_uuid}", ['page', '2']]]])
     parent_children.append(sheet_node)
 
-    # 9. Route parent wires to connect outside elements to sheet pins
-    # Bounding boxes for obstacles (excluding the sheet boundaries so routing can touch it)
-    obstacles = []
+    # 9. Connect outside pins to sheet pins with local labels (name-based, not routed).
+    # A local label at a pin's connection point connects it to every same-named label
+    # on the sheet — no wires, so no routing congestion, T-junction bridges, or
+    # dangling stubs. Placement uses the same engine as the sub-sheet: oriented away
+    # from the symbol, L-stub fan for top/bottom pins, AABB-pushed clear of symbol
+    # bodies (incl. pins/text), the sheet box, wires, and other labels, then a final
+    # reconcile pass.
+    parent_obstacles = []
+    outside_centers = {}
     for ref, inst in outside_instances.items():
         defn = local_definitions.get(inst['lib_id'])
-        local_bbox = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
-        tx, ty, angle, mirror_x, mirror_y = get_symbol_instance_transform(inst['sexpr'])
-        global_bbox = get_instance_aabb(local_bbox, tx, ty, angle, mirror_x, mirror_y)
-        obstacles.append(global_bbox)
+        lb = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
+        tx, ty, a_i, mx_i, my_i = get_symbol_instance_transform(inst['sexpr'])
+        outside_centers[ref] = get_instance_aabb(lb, tx, ty, a_i, mx_i, my_i).center
+        parent_obstacles.append(_symbol_obstacle_box(inst['sexpr'], defn))
+        parent_obstacles.extend(_property_box(inst['sexpr'], 'Reference', 'Value'))
+    sheet_box = BoundingBox(sheet_x, sheet_y, sheet_x + sheet_w, sheet_y + sheet_h)
+    sheet_center = (sheet_x + sheet_w / 2, sheet_y + sheet_h / 2)
+    parent_obstacles.append(sheet_box.pad(_LABEL_GAP))
+    for ch in parent_children:
+        if isinstance(ch, list) and ch and ch[0] == 'wire':
+            pts = next((q for q in ch[1:] if isinstance(q, list) and q[0] == 'pts'), None)
+            if pts:
+                xs = [(float(a[1]), float(a[2])) for a in pts[1:]
+                      if isinstance(a, list) and len(a) > 2 and a[0] == 'xy']
+                if len(xs) >= 2:
+                    parent_obstacles.append(_wire_box(xs[0], xs[-1]))
 
-    # Union-Find for remaining wires to find disjoint outside groups
-    uf_outside = UnionFind()
-    for child in parent_children:
-        if isinstance(child, list) and child[0] == 'wire':
-            pts_node = None
-            for sub in child[1:]:
-                if isinstance(sub, list) and sub[0] == 'pts':
-                    pts_node = sub
-                    break
-            if pts_node:
-                x1_val, y1_val = None, None
-                x2_val, y2_val = None, None
-                for xy in pts_node[1:]:
-                    if isinstance(xy, list) and len(xy) > 2 and xy[0] == 'xy':
-                        if x1_val is None:
-                            x1_val = float(xy[1])
-                            y1_val = float(xy[2])
-                        else:
-                            x2_val = float(xy[1])
-                            y2_val = float(xy[2])
-                if x1_val is not None and x2_val is not None:
-                    uf_outside.union(grid_key(x1_val, y1_val), grid_key(x2_val, y2_val))
-
-    # Pin-grid blocklist: every outside pin + every sheet pin. Stops the router from
-    # threading wires through pins or shorting adjacent nets (start/end auto-exempted).
-    blocked_pin_grids = set()
-    for ref in outside_instances:
-        for p in ref_to_pins.get(ref, []):
-            blocked_pin_grids.add(grid_key(p['x'], p['y']))
-    for info in net_to_pin_coords.values():
-        if 'parent_pin_x' in info:
-            blocked_pin_grids.add(grid_key(info['parent_pin_x'], info['parent_pin_y']))
-
+    parent_label_recs = []
+    parent_vfan = {}
+    seen_labels = set()
     routed_wires_count = 0
     for root, coords_info in net_to_pin_coords.items():
-        pin_x = coords_info['parent_pin_x']
-        pin_y = coords_info['parent_pin_y']
+        name = boundary_nets[root]['name']
+        _place_label(parent_children, parent_label_recs, parent_obstacles, parent_vfan,
+                     name, coords_info['parent_pin_x'], coords_info['parent_pin_y'],
+                     sheet_center[0], sheet_center[1], 'label', None)
+        routed_wires_count += 1
+        for p in boundary_nets[root]['outside_pins']:
+            gk = grid_key(p['x'], p['y'])
+            if (name, gk) in seen_labels:
+                continue
+            seen_labels.add((name, gk))
+            cx_o, cy_o = outside_centers.get(p['ref'], (p['x'], p['y']))
+            _place_label(parent_children, parent_label_recs, parent_obstacles, parent_vfan,
+                         name, p['x'], p['y'], cx_o, cy_o, 'label', None)
+            routed_wires_count += 1
 
-        # Outside coordinates on this net that we need to connect to the sheet pin
-        outside_gks = [gk for gk in boundary_nets[root]['coords'] if gk not in inside_coords_all]
-        if not outside_gks:
-            continue
-
-        # Group outside gks by their representative in uf_outside
-        outside_groups = {}
-        for gk in outside_gks:
-            rep = uf_outside.find(gk)
-            outside_groups.setdefault(rep, []).append(gk)
-
-        # Connect each disjoint group to the sheet pin
-        for group_gks in outside_groups.values():
-            coords = [grid_to_coord(gk) for gk in group_gks]
-            closest_coord = min(coords, key=lambda c: (c[0] - pin_x)**2 + (c[1] - pin_y)**2)
-
-            # Try routing using A* pathfinding. Block other pins AND existing wires
-            # (collinear) so re-routed nets don't overlap or short.
-            end_dir = (1, 0) if net_to_pin_coords[root]['side'] == 'left' else (-1, 0)
-            bwd = compute_blocked_wire_dirs(parent_children)
-            bwd.pop(grid_key(*closest_coord), None)
-            bwd.pop(grid_key(pin_x, pin_y), None)
-            path = find_orthogonal_path(
-                closest_coord, (pin_x, pin_y), obstacles,
-                grid_size=1.27, required_end_dir=end_dir,
-                blocked_pins=blocked_pin_grids, blocked_wires=bwd
-            )
-            if not path or len(path) <= 1:
-                path = find_orthogonal_path(
-                    closest_coord, (pin_x, pin_y), obstacles,
-                    grid_size=1.27, required_end_dir=end_dir,
-                    blocked_pins=blocked_pin_grids
-                )
-            if not path or len(path) <= 1:
-                path = find_orthogonal_path(
-                    closest_coord, (pin_x, pin_y), obstacles,
-                    grid_size=1.27, required_end_dir=end_dir
-                )
-
-            if path and len(path) > 1:
-                for i in range(len(path) - 1):
-                    p1 = path[i]
-                    p2 = path[i+1]
-                    w_expr = make_wire_sexpr(p1[0], p1[1], p2[0], p2[1])
-                    parent_children.append(w_expr)
-                    routed_wires_count += 1
-                    # Update uf_outside
-                    uf_outside.union(grid_key(p1[0], p1[1]), grid_key(p2[0], p2[1]))
-            else:
-                # Fallback simple L-shape routing
-                gx1_s = round(closest_coord[0] / 1.27) * 1.27
-                gy1_s = round(closest_coord[1] / 1.27) * 1.27
-                gx2_s = round(pin_x / 1.27) * 1.27
-                gy2_s = round(pin_y / 1.27) * 1.27
-
-                # Route horizontally first, then vertically
-                if abs(gx1_s - gx2_s) > 0.01:
-                    w1 = make_wire_sexpr(gx1_s, gy1_s, gx2_s, gy1_s)
-                    parent_children.append(w1)
-                    routed_wires_count += 1
-                if abs(gy1_s - gy2_s) > 0.01:
-                    w2 = make_wire_sexpr(gx2_s, gy1_s, gx2_s, gy2_s)
-                    parent_children.append(w2)
-                    routed_wires_count += 1
-                uf_outside.union(grid_key(gx1_s, gy1_s), grid_key(gx2_s, gy2_s))
+    _reconcile_labels(parent_label_recs, parent_obstacles)
 
     # 10. Update sheet_instances in parent schematic
     # Look for existing sheet_instances or append to end
@@ -910,7 +1076,7 @@ def create_module_from_components(schematic_path, table_path, components, module
         parent_children.append(sheet_instances_expr)
 
     # Prune any dangling wire stubs left in the parent after cutting crossing nets
-    parent_connector_gks = set(blocked_pin_grids)
+    parent_connector_gks = set()
     for ref, inst in outside_instances.items():
         for p in ref_to_pins.get(ref, []):
             parent_connector_gks.add(grid_key(p['x'], p['y']))

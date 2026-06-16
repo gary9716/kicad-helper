@@ -22,7 +22,7 @@ class TestRunErc(unittest.TestCase):
     def setUp(self):
         if find_kicad_cli() is None:
             self.skipTest("kicad-cli not installed")
-        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
         self.table = os.path.join(self.base, "sym-lib-table")
         self.gt = os.path.join(self.base, "can_node.groundtruth.json")
         if not os.path.exists(self.gt):
@@ -77,7 +77,7 @@ class TestRoutingModes(unittest.TestCase):
     def setUp(self):
         if find_kicad_cli() is None:
             self.skipTest("kicad-cli not installed")
-        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
         self.table = os.path.join(self.base, "sym-lib-table")
         self.gt = os.path.join(self.base, "can_node.groundtruth.json")
         if not os.path.exists(self.gt):

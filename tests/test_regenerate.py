@@ -126,7 +126,7 @@ from kicad_skill.regenerate import (
 
 class TestLabelEmission(unittest.TestCase):
     def setUp(self):
-        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
         self.table = os.path.join(self.base, "sym-lib-table")
         if not os.path.exists(self.table):
             self.skipTest("mcp_test artifacts not present")
@@ -160,7 +160,7 @@ from kicad_skill.regenerate import regenerate_schematic
 
 class TestRegenerateIntegration(unittest.TestCase):
     def setUp(self):
-        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
         self.table = os.path.join(self.base, "sym-lib-table")
         self.gt = os.path.join(self.base, "can_node.groundtruth.json")
         if not os.path.exists(self.table) or not os.path.exists(self.gt):

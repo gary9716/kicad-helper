@@ -54,7 +54,7 @@ class TestExtractIntegration(unittest.TestCase):
     """
 
     def setUp(self):
-        base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
         self.root = os.path.join(base, "mcp_test.kicad_sch")
         self.table = os.path.join(base, "sym-lib-table")
         self.gt = os.path.join(base, "can_node.groundtruth.json")
