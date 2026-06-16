@@ -98,18 +98,33 @@ clean single-segment tests:
 | same wire | yes (one label on the net) | **0** |
 | MCU `output` pin ↔ MCP2515 `input` pin, one straight segment | no | **1** |
 
-So the cause is **not** a generated-symbol bug, **not** the A* router, and **not** the pin
-type / a missing driver (a driving `output`/`power_out` pin does **not** remove it — only a
-label does). The earlier "router/generated-pin artifact" theory was wrong; pins are on-grid,
-positions match KiCad exactly, and `Device:R` passive pins behave identically. The likely
-mechanism is that a bare programmatic wire needs an explicit net identity (a label) — and/or
-that the `%.3f` coordinate emission drifts sub-nanometre from KiCad's pin position so the wire
-alone misses it while a coincident label bridges both. Either way:
+Everything below was ruled out as the cause, by clean single-segment tests:
 
-**Rule: every wired net must carry at least one label.** The generator label-routes by default
-and gates on ERC; any net that still dangles is demoted to all-labels and rebuilt until ERC is
-clean. (Credit: the label dependency was pinned down via an independent Gemini experiment under
-`test_project/dangling_test/`, then reconfirmed here with single-segment cases.)
+- **Not a generated-symbol bug, not the A* router** — a bare wire between two stock
+  `Device:R` pins dangles identically.
+- **Not coordinate precision** — the wire endpoint's integer-nanometre value equals KiCad's
+  computed pin position **exactly** (`100330000, 96520000` for both). Grid-aligned pins are
+  representable exactly at the `%.3f` (1 µm) emission resolution, so nothing is lost.
+- **Not pin type / a driver** — tested `output↔input`, `power_out↔power_in`,
+  `input↔tri_state`, `power_out↔input`; **all** dangle without a label. A driving pin does
+  not help. (This refutes the "a driving pin resolves it" hypothesis.)
+- **Not approach direction, not a junction** — collinear (along-pin-axis) approach and an
+  explicit junction at the pin both leave the wire dangling.
+- **Only a label clears it.** With one local label anywhere on the net, `wire_dangling`
+  goes to 0.
+
+The endpoint pins themselves *are* connected (no `pin_not_connected`); it is specifically
+the **wire** that `kicad-cli sch erc` reports as dangling until the net carries a name. The
+exact KiCad mechanism behind this (a wire connected only to pins, with no net identity, being
+flagged) is not fully explained, but the behaviour is solid and reproducible.
+
+**Rule: every wired net must carry at least one label — one label per NET, not per pin.** A
+net's pins are wired together and a single label names the whole net. The generator
+label-routes by default and gates on ERC; any net that still dangles is demoted toward labels
+and rebuilt until ERC is clean. (Credit: the label dependency was first isolated via an
+independent Gemini experiment under `test_project/dangling_test/`; pin-type independence,
+nm-exact coordinates, junction, and approach-direction were then established here.)
+Regression: `tests/test_wiring_needs_label.py`.
 
 ---
 
