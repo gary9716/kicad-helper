@@ -28,13 +28,20 @@ class TestRunErc(unittest.TestCase):
         if not os.path.exists(self.gt):
             self.skipTest("mcp_test artifacts not present")
 
-    def test_detects_wire_dangling_when_erc_gate_disabled(self):
-        # Without the ERC gate, wire-routing the RESET net leaves a dangling wire
-        # that the hand-rolled netlist model misses; run_erc must surface it.
+    def test_detects_injected_dangling_wire(self):
+        # run_erc must surface a wire whose endpoint touches nothing.
         from kicad_skill.regenerate import regenerate_schematic
+        from kicad_skill.parser import parse_sexpr, format_sexpr
+        from kicad_skill.schematic import make_wire_sexpr
         out = os.path.join(self.base, "_erc_dangling.kicad_sch")
         self.addCleanup(lambda: os.path.exists(out) and os.remove(out))
-        regenerate_schematic(self.gt, self.table, out, use_erc=False)
+        regenerate_schematic(self.gt, self.table, out)
+        self.assertEqual(run_erc(out)["error_count"], 0)  # clean to start
+        # Append a stray wire into empty space (both ends connect to nothing).
+        sx = parse_sexpr(open(out).read())
+        sx.append(make_wire_sexpr(10.16, 10.16, 25.4, 10.16))
+        with open(out, "w") as f:
+            f.write(format_sexpr(sx))
         rep = run_erc(out)
         types = {v["type"] for v in rep["violations"]}
         self.assertIn("wire_dangling", types)
