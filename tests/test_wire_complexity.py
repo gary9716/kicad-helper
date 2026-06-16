@@ -88,3 +88,37 @@ class TestConnections(unittest.TestCase):
         sx = _parse_schematic(self.sch)
         find = _build_net_find(sx)
         self.assertEqual(find((38, 40)), find((58, 48)))
+
+
+from kicad_skill.wire_complexity import (
+    _path_bends, _path_length, _count_crossings, score_wire_complexity, DEFAULT_WEIGHTS,
+)
+
+class TestScoring(unittest.TestCase):
+    def test_bends_and_length(self):
+        straight = [(0, 0), (5, 0)]
+        self.assertEqual(_path_bends(straight), 0)
+        self.assertEqual(_path_length(straight), 5)
+        ell = [(0, 0), (0, 3), (4, 3)]
+        self.assertEqual(_path_bends(ell), 1)
+        self.assertEqual(_path_length(ell), 7)
+
+    def test_crossing_perpendicular_different_net(self):
+        segs_self = [((0, 0), (10, 0))]
+        other_segs = [((5, -5), (5, 5))]
+        self.assertEqual(_count_crossings(segs_self, other_segs), 1)
+
+    def test_no_crossing_when_shared_endpoint(self):
+        segs_self = [((0, 0), (10, 0))]
+        other_segs = [((10, 0), (10, 5))]
+        self.assertEqual(_count_crossings(segs_self, other_segs), 0)
+
+class TestScoreMonotonic(unittest.TestCase):
+    def test_more_bends_scores_higher(self):
+        straight = [(0, 0), (10, 0)]
+        zig = [(0, 0), (0, 2), (5, 2), (5, 0), (10, 0)]
+        from kicad_skill.wire_complexity import _path_bends, _path_length, DEFAULT_WEIGHTS
+        w = DEFAULT_WEIGHTS
+        s_straight = w["bends"] * _path_bends(straight) + w["length"] * _path_length(straight)
+        s_zig = w["bends"] * _path_bends(zig) + w["length"] * _path_length(zig)
+        self.assertGreater(s_zig, s_straight)
