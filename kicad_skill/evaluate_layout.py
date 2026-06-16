@@ -443,7 +443,7 @@ def evaluate_schematic_layout(sch_path, table_path):
 
     # Informational only — wire routing complexity (NOT fatal, does not affect score band).
     try:
-        from .wire_complexity import score_wire_complexity
+        from kicad_skill.wire_complexity import score_wire_complexity
         wire_complexity_total = score_wire_complexity(sch_path, table_path)["total"]
     except Exception:
         wire_complexity_total = 0.0
