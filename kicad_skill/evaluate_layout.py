@@ -441,9 +441,17 @@ def evaluate_schematic_layout(sch_path, table_path):
         score = min(score, 30)
         issues.append(f"[FATAL] {short_count} short(s) and {dangling_count} dangling wire(s) — schematic is electrically invalid.")
 
+    # Informational only — wire routing complexity (NOT fatal, does not affect score band).
+    try:
+        from .wire_complexity import score_wire_complexity
+        wire_complexity_total = score_wire_complexity(sch_path, table_path)["total"]
+    except Exception:
+        wire_complexity_total = 0.0
+
     return {
         "score": score,
         "fatal": fatal,
+        "wire_complexity_total": wire_complexity_total,
         "grid_errors": grid_errors,
         "overlaps_count": overlaps_count,
         "unconnected_pins_count": unconnected_pins_count,
@@ -466,6 +474,7 @@ if __name__ == "__main__":
     print(f"------------------------------------------")
     print(f"Net shorts (FATAL):     {res.get('shorts', 0)}")
     print(f"Dangling wires (FATAL): {res.get('dangling', 0)}")
+    print(f"Wire complexity total: {res.get('wire_complexity_total', 0.0):.1f}")
     print(f"Off-grid elements:      {res.get('grid_errors', 0)}")
     print(f"Symbol overlaps:        {res.get('overlaps_count', 0)}")
     print(f"Disconnected pins:      {res.get('unconnected_pins_count', 0)}")

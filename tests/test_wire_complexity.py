@@ -197,3 +197,19 @@ class TestRollback(unittest.TestCase):
         with open(sch) as f:
             self.assertIn("(wire", f.read())
         td.cleanup()
+
+
+class TestEvalMetric(unittest.TestCase):
+    def test_evaluate_reports_wire_complexity_total(self):
+        td = tempfile.TemporaryDirectory()
+        sch = os.path.join(td.name, "t.kicad_sch")
+        table = os.path.join(td.name, "sym-lib-table")
+        with open(table, "w") as f:
+            f.write("(sym_lib_table)\n")
+        with open(sch, "w") as f:
+            f.write(SCH2)
+        from kicad_skill.evaluate_layout import evaluate_schematic_layout
+        res = evaluate_schematic_layout(sch, table)
+        self.assertIn("wire_complexity_total", res)
+        self.assertGreaterEqual(res["wire_complexity_total"], 0.0)
+        td.cleanup()
