@@ -838,10 +838,16 @@ def add_symbol_def_to_schematic(sch_sexpr, symbol_def):
     lib_syms.append(symbol_def)
 
 
-def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin=2.54, resolve=True):
+def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin=2.54, resolve=True,
+                              bbox_overrides=None):
     """
     Places new symbols in the schematic, parses all symbols' bounds, resolves overlaps, and writes back.
-    
+
+    bbox_overrides: optional {reference: BoundingBox} of local bounding boxes to use
+    for overlap resolution instead of the symbol's own body box. Callers pass boxes
+    padded for net-label text so symbols are spread far enough apart that labels do
+    not collide. Symbol positions still snap to grid.
+
     new_placements: list of dicts:
     [
         {
@@ -974,8 +980,10 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
                             local_definitions[lib_id_node] = defn
                             
                 local_bbox = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
+                if bbox_overrides and ref_val in bbox_overrides:
+                    local_bbox = bbox_overrides[ref_val]
                 tx, ty, angle, mirror_x, mirror_y = get_symbol_instance_transform(child)
-                
+
                 # Check if this instance is one of the newly added ones
                 is_new = child in new_instances
                 

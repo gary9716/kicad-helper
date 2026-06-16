@@ -18,6 +18,9 @@ from kicad_skill.schematic import (
     connect_symbols_in_schematic,
     load_sym_lib_table,
     find_symbol_definition,
+    get_symbol_local_bbox,
+    get_all_pins_from_symbol_def,
+    BoundingBox,
 )
 from kicad_skill.module import get_symbol_pins_global
 from kicad_skill.netlist_eval import extract_actual_netlist, compare, load_ground_truth
@@ -196,13 +199,54 @@ def _placements_from_components(components):
     return placements
 
 
-def _build_once(out_sch, table_path, nets, components, placements, forced_labels):
+_LABEL_CHAR_WIDTH = 1.0   # mm per character at 1.27mm font (matches symbol.py)
+_LABEL_GAP = 1.27         # mm breathing room beyond the text
+
+
+def _label_padded_bboxes(components, nets, table_path, project_dir):
+    """Return {ref: BoundingBox} of each symbol's local body box padded outward by
+    its net-label text extents, so overlap resolution spreads symbols far enough
+    that labels do not collide. Every pin is assumed labelled (conservative); a pin
+    that ends up wire-routed instead just leaves a little extra slack.
+    """
+    lib_map = load_sym_lib_table(table_path) if os.path.exists(table_path) else {}
+    pin_to_net = {pin: n["name"] for n in nets for pin in n["pins"]}
+    out = {}
+    for ref, c in components.items():
+        lib_id = c.get("lib_id", "")
+        if ":" not in lib_id:
+            continue
+        lib_name, sym_name = lib_id.split(":", 1)
+        defn = find_symbol_definition(lib_name, sym_name, lib_map, project_dir)
+        if not defn:
+            continue
+        bbox = get_symbol_local_bbox(defn)
+        h_ext = v_ext = 0.0
+        for p in get_all_pins_from_symbol_def(defn):
+            name = pin_to_net.get(f"{ref}:{p['number']}")
+            if not name:
+                continue
+            ext = len(name) * _LABEL_CHAR_WIDTH + _LABEL_GAP
+            # A pin on a horizontal side carries a horizontal label (grows in x);
+            # a pin on a vertical side carries a vertical label (grows in y).
+            if abs(p["x"]) >= abs(p["y"]):
+                h_ext = max(h_ext, ext)
+            else:
+                v_ext = max(v_ext, ext)
+        out[ref] = BoundingBox(bbox.xmin - h_ext, bbox.ymin - v_ext,
+                               bbox.xmax + h_ext, bbox.ymax + v_ext)
+    return out
+
+
+def _build_once(out_sch, table_path, nets, components, placements, forced_labels,
+                bbox_overrides=None):
     """Place symbols and route one pass; nets in forced_labels are label-routed.
 
     Returns the list of wire-net names actually emitted as wires this pass.
     """
     _write_blank_schematic(out_sch)
-    place_symbols_and_resolve(out_sch, table_path, placements, margin=2.54, resolve=True)
+    place_symbols_and_resolve(out_sch, table_path, placements, margin=2.54, resolve=True,
+                              bbox_overrides=bbox_overrides)
     coords = _pin_coords(out_sch, table_path)
     centers = _centers_from_schematic(out_sch)
 
@@ -234,6 +278,8 @@ def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=Tr
     gt = load_ground_truth(gt_path)
     nets, components = load_gt_components(gt)
     placements = _placements_from_components(components)
+    project_dir = os.path.dirname(os.path.abspath(out_sch))
+    bbox_overrides = _label_padded_bboxes(components, nets, table_path, project_dir)
 
     forced_labels = set()
     if max_iter is None:
@@ -241,7 +287,8 @@ def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=Tr
     erc_available = use_erc and find_kicad_cli() is not None
 
     for _ in range(max_iter):
-        wire_names = set(_build_once(out_sch, table_path, nets, components, placements, forced_labels))
+        wire_names = set(_build_once(out_sch, table_path, nets, components, placements,
+                                     forced_labels, bbox_overrides))
         rep = compare(extract_actual_netlist(out_sch, table_path), nets)
 
         if erc_available:
