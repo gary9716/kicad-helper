@@ -122,3 +122,78 @@ class TestScoreMonotonic(unittest.TestCase):
         s_straight = w["bends"] * _path_bends(straight) + w["length"] * _path_length(straight)
         s_zig = w["bends"] * _path_bends(zig) + w["length"] * _path_length(zig)
         self.assertGreater(s_zig, s_straight)
+
+
+from kicad_skill.wire_complexity import simplify_wires, score_wire_complexity
+from kicad_skill.evaluate_layout import evaluate_schematic_layout
+
+class TestSimplify(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.sch = os.path.join(self.td.name, "t.kicad_sch")
+        self.table = os.path.join(self.td.name, "sym-lib-table")
+        with open(self.table, "w") as f:
+            f.write("(sym_lib_table)\n")
+        with open(self.sch, "w") as f:
+            f.write(SCH2)
+
+    def tearDown(self):
+        self.td.cleanup()
+
+    def test_convert_lowers_total_and_preserves_net(self):
+        before = score_wire_complexity(self.sch, self.table)["total"]
+        res = simplify_wires(self.sch, self.table, threshold=0.0)
+        self.assertEqual(len(res["converted"]), 1)
+        self.assertLess(res["total_after"], before)
+        ev = evaluate_schematic_layout(self.sch, self.table)
+        self.assertEqual(ev["shorts"], 0)
+        self.assertEqual(ev["dangling"], 0)
+        from kicad_skill.wire_complexity import _parse_schematic, _collect_labels
+        labels = _collect_labels(_parse_schematic(self.sch))
+        self.assertEqual(len(labels), 2)
+        self.assertEqual(labels[0][1], labels[1][1])
+
+    def test_dry_run_does_not_write(self):
+        with open(self.sch) as f:
+            original = f.read()
+        res = simplify_wires(self.sch, self.table, threshold=0.0, dry_run=True)
+        with open(self.sch) as f:
+            self.assertEqual(f.read(), original)
+        self.assertEqual(len(res["converted"]), 1)
+
+
+class TestRollback(unittest.TestCase):
+    def test_branch_net_not_converted(self):
+        td = tempfile.TemporaryDirectory()
+        sch = os.path.join(td.name, "t.kicad_sch")
+        table = os.path.join(td.name, "sym-lib-table")
+        with open(table, "w") as f:
+            f.write("(sym_lib_table)\n")
+        sch_text = """(kicad_sch
+  (version 20211123) (generator "eeschema") (generator_version "10.0")
+  (uuid "u") (paper "A4")
+  (lib_symbols
+    (symbol "lib:P"
+      (property "Reference" "P" (at 0 0 0) (effects (font (size 1.27 1.27))))
+      (property "Value" "P" (at 0 0 0) (effects (font (size 1.27 1.27))))
+      (symbol "P_1_1"
+        (pin passive line (at 0 0 0) (length 0)
+          (name "K" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      )
+    )
+  )
+  (symbol (lib_id "lib:P") (at 50.8 50.8 0) (property "Reference" "A" (at 0 0 0)) (property "Value" "P" (at 0 0 0)))
+  (symbol (lib_id "lib:P") (at 76.2 50.8 0) (property "Reference" "B" (at 0 0 0)) (property "Value" "P" (at 0 0 0)))
+  (symbol (lib_id "lib:P") (at 63.5 63.5 0) (property "Reference" "C" (at 0 0 0)) (property "Value" "P" (at 0 0 0)))
+  (wire (pts (xy 50.8 50.8) (xy 63.5 50.8)) (stroke (width 0) (type default)) (uuid "w1"))
+  (wire (pts (xy 63.5 50.8) (xy 76.2 50.8)) (stroke (width 0) (type default)) (uuid "w2"))
+  (wire (pts (xy 63.5 50.8) (xy 63.5 63.5)) (stroke (width 0) (type default)) (uuid "w3"))
+)
+"""
+        with open(sch, "w") as f:
+            f.write(sch_text)
+        res = simplify_wires(sch, table, threshold=0.0)
+        self.assertEqual(len(res["converted"]), 0)
+        with open(sch) as f:
+            self.assertIn("(wire", f.read())
+        td.cleanup()

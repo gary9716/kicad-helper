@@ -220,18 +220,69 @@ def _count_crossings(self_segs, other_segs):
 
 
 def score_wire_complexity(sch_path, table_path, weights=None):
-    w = dict(DEFAULT_WEIGHTS)
-    if weights:
-        w.update(weights)
     sx = _parse_schematic(sch_path)
     project_dir = os.path.dirname(os.path.abspath(sch_path))
     pins = _collect_pins(sx, table_path, project_dir)
+    sc = _score_from_ast(sx, pins, weights)
+    return {"total": sc["total"], "connections": sc["connections"]}
+
+
+import uuid as _uuid
+
+
+def _pin_partition(sx, pins, table_path, project_dir):
+    """Frozenset of frozensets: which pins are mutually connected (net equivalence)."""
+    find = _build_net_find(sx, pins)
+    groups = {}
+    for p in pins:
+        root = find(p["gk"])
+        groups.setdefault(root, set()).add(f"{p['ref']}:{p['number']}")
+    return frozenset(frozenset(g) for g in groups.values())
+
+
+def _net_name_for(conn, sx, find, counter):
+    """existing label on net -> pin-derived -> NET_n."""
+    self_root = find(conn["path"][0])
+    for _, text, gk in _collect_labels(sx):
+        if find(gk) == self_root:
+            return text
+    p = conn["pin_a"]
+    base = (p["name"] or p["number"]).replace("/", "_").replace(" ", "_")
+    return f"{p['ref']}_{base}" if base else f"NET_{counter}"
+
+
+def _label_sexpr(text, gk, toward_left):
+    x, y = gk[0] * GRID, gk[1] * GRID
+    angle = "180" if toward_left else "0"
+    justify = "right" if toward_left else "left"
+    return ["label", text,
+            ["at", f"{x:.3f}", f"{y:.3f}", angle],
+            ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", justify]],
+            ["uuid", str(_uuid.uuid4())]]
+
+
+def _apply_conversion(sx, conn, net_name):
+    """Delete the connection's wires; add a stub+label at each terminal pin. Mutates sx."""
+    remove = set(id(n) for n in conn["wire_nodes"])
+    sx[:] = [sx[0]] + [c for c in sx[1:]
+                       if not (isinstance(c, list) and c and c[0] == "wire" and id(c) in remove)]
+    for pin in (conn["pin_a"], conn["pin_b"]):
+        gk = pin["gk"]
+        toward_left = pin is conn["pin_a"]
+        stub_gk = (gk[0] - 1, gk[1]) if toward_left else (gk[0] + 1, gk[1])
+        sx.append(make_wire_sexpr(gk[0] * GRID, gk[1] * GRID,
+                                  stub_gk[0] * GRID, stub_gk[1] * GRID))
+        sx.append(_label_sexpr(net_name, stub_gk, toward_left))
+
+
+def _score_from_ast(sx, pins, weights=None):
+    w = dict(DEFAULT_WEIGHTS)
+    if weights:
+        w.update(weights)
     find = _build_net_find(sx, pins)
     conns = _reconstruct_connections(sx, pins)
-
     wires = _collect_wires(sx)
-    results = []
-    total = 0.0
+    results, full, total = [], [], 0.0
     for c in conns:
         self_segs = _segments_of_path(c["path"])
         self_root = find(c["path"][0])
@@ -241,10 +292,61 @@ def score_wire_complexity(sch_path, table_path, weights=None):
         length = _path_length(c["path"])
         score = w["crossings"] * crossings + w["bends"] * bends + w["length"] * length
         total += score
-        results.append({
-            "pin_a": f"{c['pin_a']['ref']}:{c['pin_a']['name']}",
-            "pin_b": f"{c['pin_b']['ref']}:{c['pin_b']['name']}",
-            "score": score, "crossings": crossings, "bends": bends, "length": length,
-        })
+        row = {"pin_a": f"{c['pin_a']['ref']}:{c['pin_a']['name']}",
+               "pin_b": f"{c['pin_b']['ref']}:{c['pin_b']['name']}",
+               "score": score, "crossings": crossings, "bends": bends, "length": length}
+        results.append(row)
+        full.append({**row, "_conn": c})
     results.sort(key=lambda r: r["score"], reverse=True)
-    return {"total": total, "connections": results}
+    full.sort(key=lambda r: r["score"], reverse=True)
+    return {"total": total, "connections": results, "connections_full": full}
+
+
+def simplify_wires(sch_path, table_path, threshold=50.0, weights=None,
+                   max_conversions=None, dry_run=False):
+    project_dir = os.path.dirname(os.path.abspath(sch_path))
+    sx = _parse_schematic(sch_path)
+    pins = _collect_pins(sx, table_path, project_dir)
+    baseline_partition = _pin_partition(sx, pins, table_path, project_dir)
+
+    total_before = _score_from_ast(sx, pins, weights)["total"]
+    converted, skipped = [], []
+    counter = 0
+    tried = set()
+
+    def current_total_and_conns():
+        sc = _score_from_ast(sx, pins, weights)
+        return sc["total"], sc["connections_full"]
+
+    total, conns = current_total_and_conns()
+    while total > threshold:
+        if max_conversions is not None and len(converted) >= max_conversions:
+            break
+        cand = next((c for c in conns
+                     if frozenset(id(n) for n in c["_conn"]["wire_nodes"]) not in tried), None)
+        if cand is None:
+            break
+        conn = cand["_conn"]
+        tried.add(frozenset(id(n) for n in conn["wire_nodes"]))
+        snapshot = format_sexpr(sx)
+        find = _build_net_find(sx, pins)
+        counter += 1
+        name = _net_name_for(conn, sx, find, counter)
+        _apply_conversion(sx, conn, name)
+        new_partition = _pin_partition(sx, pins, table_path, project_dir)
+        if new_partition == baseline_partition:
+            converted.append({"net_name": name, "pin_a": cand["pin_a"],
+                              "pin_b": cand["pin_b"], "score": cand["score"]})
+            tried = set()
+            total, conns = current_total_and_conns()
+        else:
+            sx[:] = parse_sexpr(snapshot)
+            skipped.append({"pin_a": cand["pin_a"], "pin_b": cand["pin_b"],
+                            "reason": "would change connectivity"})
+
+    if not dry_run and converted:
+        with open(sch_path, "w", encoding="utf-8") as f:
+            f.write(format_sexpr(sx))
+    total_after = _score_from_ast(sx, pins, weights)["total"]
+    return {"total_before": total_before, "total_after": total_after,
+            "converted": converted, "skipped_unsafe": skipped}
