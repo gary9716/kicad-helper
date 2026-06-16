@@ -53,6 +53,11 @@ https://docs.kicad.org/doxygen/sch__line_8cpp_source.html):
 pin's connection point to the nanometre. To connect two nets, place same-named labels at
 the exact pin connection points.
 
+**Caveat (see §4):** geometric coincidence as described above is necessary but, for
+*programmatically emitted* wires, observed not to be sufficient — a wire between two pins is
+still flagged `wire_dangling` unless the net also carries a label. Treat a label as required
+on every wired net.
+
 ---
 
 ## 3. Labels vs wires
@@ -82,19 +87,29 @@ Professional schematic convention, confirmed in practice:
   spider-web wiring across the sheet.
 - **Symbol ↔ passive / power symbol / connector**: a short **wire** reads best.
 
-**Caveat discovered this session:** `connect_symbols_in_schematic`'s A* router can emit a
-multi-segment path whose endpoint coincides with a generated IC pin yet KiCad still reports
-`wire_dangling` on a sub-chain of segments (e.g. a 1.27 mm stub + an L-corner that KiCad
-doesn't merge). Root cause unresolved; the pin itself *is* connected (`pin_not_connected`
-is **not** raised), but the wire segments dangle. This is a **router-geometry artifact**,
-not a pin/grid/symbol/lib-naming bug — those were all ruled out:
-- pins are on-grid, positions match KiCad exactly;
-- lib_symbols sub-symbol names are correct (see §5);
-- the same wire connects fine to `Device:R`/`Device:C` passive pins.
+**Why wired nets need a label (corrected — this was initially misdiagnosed):** a programmatically
+emitted wire between two pins is reported `wire_dangling` by KiCad ERC **unless the net carries
+a label**, even when the wire endpoints coincide with the pins to the nanometre. Verified with
+clean single-segment tests:
 
-**Mitigation:** the generator routes IC pins via labels (which always connect) and gates on
-ERC; any wire that dangles is demoted to a label and the schematic is rebuilt until ERC is
-clean. Fixing the router to re-enable IC↔passive wires is future work.
+| wire | label? | `wire_dangling` |
+|------|--------|-----------------|
+| `Device:R` ↔ `Device:R` (passive↔passive), one straight segment | no | **1** |
+| same wire | yes (one label on the net) | **0** |
+| MCU `output` pin ↔ MCP2515 `input` pin, one straight segment | no | **1** |
+
+So the cause is **not** a generated-symbol bug, **not** the A* router, and **not** the pin
+type / a missing driver (a driving `output`/`power_out` pin does **not** remove it — only a
+label does). The earlier "router/generated-pin artifact" theory was wrong; pins are on-grid,
+positions match KiCad exactly, and `Device:R` passive pins behave identically. The likely
+mechanism is that a bare programmatic wire needs an explicit net identity (a label) — and/or
+that the `%.3f` coordinate emission drifts sub-nanometre from KiCad's pin position so the wire
+alone misses it while a coincident label bridges both. Either way:
+
+**Rule: every wired net must carry at least one label.** The generator label-routes by default
+and gates on ERC; any net that still dangles is demoted to all-labels and rebuilt until ERC is
+clean. (Credit: the label dependency was pinned down via an independent Gemini experiment under
+`test_project/dangling_test/`, then reconfirmed here with single-segment cases.)
 
 ---
 
