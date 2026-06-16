@@ -190,14 +190,6 @@ def _boxes_overlap(a, b):
     return a.xmin < b.xmax and a.xmax > b.xmin and a.ymin < b.ymax and a.ymax > b.ymin
 
 
-def _label_orientation(px, py, cx, cy):
-    """(angle, justify) so a label at a pin grows AWAY from the symbol body."""
-    dx, dy = px - cx, py - cy
-    if abs(dx) >= abs(dy):
-        return (0, "right") if dx < 0 else (0, "left")
-    return (90, "left") if dy < 0 else (90, "right")
-
-
 def _label_text_box(text, x, y, angle, justify):
     """Approx AABB of a label's text box anchored at (x, y)."""
     w = max(1, len(text)) * _LABEL_CHAR_W + _LABEL_GAP
@@ -233,30 +225,6 @@ def _property_box(inst, *names):
     return boxes
 
 
-def _resolve_label_pos(name, px, py, cx, cy, obstacles, placed, max_steps=10):
-    """Find a clear anchor for a net label off pin (px,py) of a symbol centred at
-    (cx,cy). Pushes outward along the pin's dominant axis until the text box clears
-    every obstacle + already-placed label, then records the chosen box in `placed`.
-    Returns (anchor_x, anchor_y, angle, justify)."""
-    angle, justify = _label_orientation(px, py, cx, cy)
-    dx, dy = px - cx, py - cy
-    if abs(dx) >= abs(dy):
-        ux, uy = (1.0 if dx >= 0 else -1.0), 0.0
-    else:
-        ux, uy = 0.0, (1.0 if dy >= 0 else -1.0)
-    ax, ay = px, py
-    box = _label_text_box(name, ax, ay, angle, justify)
-    for _ in range(max_steps):
-        if not any(_boxes_overlap(box, o) for o in obstacles) and \
-           not any(_boxes_overlap(box, o) for o in placed):
-            break
-        ax += ux * 1.27
-        ay += uy * 1.27
-        box = _label_text_box(name, ax, ay, angle, justify)
-    placed.append(box)
-    return ax, ay, angle, justify
-
-
 def _symbol_obstacle_box(inst, defn, dx=0.0, dy=0.0, pad=2.54):
     """AABB of a placed symbol that INCLUDES its pins (and a text-margin pad), so
     labels are pushed clear of pin numbers / pin names — not just the body graphic.
@@ -287,78 +255,115 @@ def _update_wire_end(wire, x, y):
         pts[2] = ['xy', f"{x:.3f}", f"{y:.3f}"]
 
 
-def _place_label(children, recs, base_obstacles, vfan, name, px, py, cx, cy, kind, shape):
+def _seg_hits_point(ax, ay, bx, by, px, py, eps=0.06):
+    """True if point (px,py) lies on the axis-aligned segment (ax,ay)-(bx,by)."""
+    if abs(ax - bx) <= eps:
+        return abs(px - ax) <= eps and min(ay, by) - eps <= py <= max(ay, by) + eps
+    if abs(ay - by) <= eps:
+        return abs(py - ay) <= eps and min(ax, bx) - eps <= px <= max(ax, bx) + eps
+    return False
+
+
+def _stub_bad(sx, sy, lx, ly, cross_boxes, recs, skip=None):
+    """True if the stub wire (sx,sy)->(lx,ly) is illegal: it passes through a cross
+    body (padded, includes pins → guards against shorting another symbol's pin) OR it
+    passes over another label's anchor (a wire crossing a label connects to it)."""
+    wb = _wire_box((sx, sy), (lx, ly))
+    if any(_boxes_overlap(wb, c) for c in cross_boxes):
+        return True
+    for o in recs:
+        if o is skip:
+            continue
+        if _seg_hits_point(sx, sy, lx, ly, o['lx'], o['ly']):
+            return True
+    return False
+
+
+def _place_label(children, recs, base_obstacles, vfan, name, px, py, cx, cy, kind, shape,
+                 cross_boxes):
     """Place one net label off pin (px,py) of a symbol/sheet centred at (cx,cy).
 
-    Left/right pins get a straight horizontal stub + horizontal label. Top/bottom pins
-    get an L-stub — a staggered vertical riser then a horizontal run — so their labels
-    read horizontally and fan out at different heights instead of forming a vertical
-    comb. The label box is pushed outward clear of base obstacles + already-placed
-    labels; a later _reconcile_labels pass settles overlaps with wires/labels added
-    afterwards. Nodes are appended to `children`; a record is appended to `recs`."""
+    Left/right pins get a short straight stub. Top/bottom pins get an L-stub (staggered
+    vertical riser + horizontal run); the run direction is chosen by ray clearance so it
+    fans toward open space rather than through a neighbouring symbol. The label text is
+    pushed a short, bounded distance clear of bodies/text/other labels; stubs are kept
+    short so they never reach another symbol's pin. `cross_boxes` = bodies the stub must
+    not cross. Nodes appended to `children`; a record appended to `recs`."""
     ddx, ddy = px - cx, py - cy
     riser = None
+    text_obstacles = base_obstacles + [r['box'] for r in recs]
+
+    def push(lx, ly, ux, uy, just, cap=6):
+        box = _label_text_box(name, lx, ly, 0, just)
+        for _ in range(cap):
+            if not any(_boxes_overlap(box, o) for o in text_obstacles):
+                break
+            nlx, nly = lx + ux * 1.27, ly + uy * 1.27
+            if _stub_bad(sx, sy, nlx, nly, cross_boxes, recs):
+                break                       # never push a stub through a body/pin/label
+            lx, ly = nlx, nly
+            box = _label_text_box(name, lx, ly, 0, just)
+        return lx, ly, box
+
     if abs(ddx) >= abs(ddy):
         ux = 1.0 if ddx >= 0 else -1.0
-        hl_ang, hl_just = (0, 'left') if ux > 0 else (180, 'right')
-        ax, ay = px, py
-        lx, ly = px + ux * 2.54, py
-        rux, ruy = ux, 0.0
+        just = 'left' if ux > 0 else 'right'
+        sx, sy = px, py
+        lx, ly, box = push(px + ux * 2.54, py, ux, 0.0, just)
+        hl_ang, rux, ruy = (0 if ux > 0 else 180), ux, 0.0
     else:
         uy = 1.0 if ddy >= 0 else -1.0
         key = (round(cx, 1), round(cy, 1), uy)
         idx = vfan.get(key, 0)
         vfan[key] = idx + 1
         kx, ky = px, py + uy * (3.81 + idx * 2.54)
+        sx, sy = kx, ky
+        # Fan toward whichever horizontal side is clear of other symbols (ray test).
+        clear = [hx for hx in (1.0, -1.0)
+                 if not _stub_bad(kx, ky, kx + hx * 11.0, ky, cross_boxes, recs)]
+        hx = clear[0] if clear else 1.0
+        just = 'left' if hx > 0 else 'right'
+        lx, ly, box = push(kx + hx * 2.54, ky, hx, 0.0, just)
         riser = make_wire_sexpr(px, py, kx, ky)
         base_obstacles.append(_wire_box((px, py), (kx, ky)))
-        hx = -1.0 if px <= cx else 1.0
-        hl_ang, hl_just = (0, 'left') if hx > 0 else (180, 'right')
-        ax, ay = kx, ky
-        lx, ly = kx + hx * 2.54, ky
-        rux, ruy = hx, 0.0
-    box = _label_text_box(name, lx, ly, 0, hl_just)
-    obstacles = base_obstacles + [r['box'] for r in recs]
-    for _ in range(12):
-        if not any(_boxes_overlap(box, o) for o in obstacles):
-            break
-        lx += rux * 1.27
-        ly += ruy * 1.27
-        box = _label_text_box(name, lx, ly, 0, hl_just)
-    wire = make_wire_sexpr(ax, ay, lx, ly)
+        hl_ang, rux, ruy = (0 if hx > 0 else 180), hx, 0.0
+    wire = make_wire_sexpr(sx, sy, lx, ly)
     node = [kind, name]
     if shape is not None:
         node.append(['shape', shape])
     node += [['at', f"{lx:.3f}", f"{ly:.3f}", str(hl_ang)],
-             ['effects', ['font', ['size', '1.27', '1.27']], ['justify', hl_just]],
+             ['effects', ['font', ['size', '1.27', '1.27']], ['justify', just]],
              ['uuid', str(uuid.uuid4())]]
     if riser is not None:
         children.append(riser)
     children.append(wire)
     children.append(node)
-    recs.append({'name': name, 'spx': ax, 'spy': ay, 'ux': rux, 'uy': ruy,
-                 'bx_ang': 0, 'bx_just': hl_just, 'lx': lx, 'ly': ly, 'box': box,
+    recs.append({'name': name, 'spx': sx, 'spy': sy, 'ux': rux, 'uy': ruy,
+                 'bx_just': just, 'lx': lx, 'ly': ly, 'box': box, 'cross': cross_boxes,
                  'label_node': node, 'wire_node': wire})
 
 
 def _reconcile_labels(records, base_obstacles, max_passes=6):
     """Iteratively push any label whose text box overlaps a symbol/text obstacle,
-    another label, or any stub wire (its own excluded) further outward along its pin
-    axis, until nothing overlaps. Mutates each record's label + stub nodes in place."""
+    another label, or another stub wire further along its run axis — but NEVER past the
+    point where its stub would cross a body/pin (that would short nets). Mutates each
+    record's label + stub in place."""
     for _ in range(max_passes):
         moved = False
         for r in records:
-            others = list(base_obstacles)
+            text_obs = list(base_obstacles)
             for o in records:
                 if o is r:
                     continue
-                others.append(o['box'])
-                others.append(_wire_box((o['spx'], o['spy']), (o['lx'], o['ly'])))
+                text_obs.append(o['box'])
+                text_obs.append(_wire_box((o['spx'], o['spy']), (o['lx'], o['ly'])))
             steps = 0
-            while steps < 8 and any(_boxes_overlap(r['box'], o) for o in others):
-                r['lx'] += r['ux'] * 1.27
-                r['ly'] += r['uy'] * 1.27
-                r['box'] = _label_text_box(r['name'], r['lx'], r['ly'], r['bx_ang'], r['bx_just'])
+            while steps < 6 and any(_boxes_overlap(r['box'], o) for o in text_obs):
+                nlx, nly = r['lx'] + r['ux'] * 1.27, r['ly'] + r['uy'] * 1.27
+                if _stub_bad(r['spx'], r['spy'], nlx, nly, r['cross'], records, skip=r):
+                    break
+                r['lx'], r['ly'] = nlx, nly
+                r['box'] = _label_text_box(r['name'], r['lx'], r['ly'], 0, r['bx_just'])
                 steps += 1
             if steps:
                 moved = True
@@ -808,6 +813,7 @@ def create_module_from_components(schematic_path, table_path, components, module
     # in a second pass after all are placed (see _reconcile_labels).
     sub_base_obstacles = []
     sub_label_recs = []
+    sub_symbol_boxes = {}     # ref -> body box (stub wires must not cross OTHER symbols)
     moved_centers = {}
     for ref, inst in moved_instances.items():
         defn = local_definitions.get(inst['lib_id'])
@@ -817,7 +823,9 @@ def create_module_from_components(schematic_path, table_path, components, module
         # outward direction uses the body-graphic centre (pin-exclusive, so pins on
         # one side don't bias it); the obstacle box includes pins + a text margin.
         moved_centers[ref] = (body.center[0] + dx, body.center[1] + dy)
-        sub_base_obstacles.append(_symbol_obstacle_box(inst['sexpr'], defn, dx, dy))
+        obox = _symbol_obstacle_box(inst['sexpr'], defn, dx, dy)
+        sub_symbol_boxes[ref] = obox
+        sub_base_obstacles.append(obox)
         for b in _property_box(inst['sexpr'], 'Reference', 'Value'):
             sub_base_obstacles.append(BoundingBox(b.xmin + dx, b.ymin + dy,
                                                   b.xmax + dx, b.ymax + dy))
@@ -827,8 +835,9 @@ def create_module_from_components(schematic_path, table_path, components, module
     def _emit_sub_label(name, pin, kind, shape):
         spx, spy = pin['x'] + dx, pin['y'] + dy
         ocx, ocy = moved_centers.get(pin['ref'], (spx, spy))
+        cross = [b for r, b in sub_symbol_boxes.items() if r != pin['ref']]
         _place_label(sub_sch_children, sub_label_recs, sub_base_obstacles, vfan,
-                     name, spx, spy, ocx, ocy, kind, shape)
+                     name, spx, spy, ocx, ocy, kind, shape, cross)
 
     def _unique_inside_pins(pin_list):
         seen, out = set(), []
@@ -1013,13 +1022,16 @@ def create_module_from_components(schematic_path, table_path, components, module
     # bodies (incl. pins/text), the sheet box, wires, and other labels, then a final
     # reconcile pass.
     parent_obstacles = []
+    parent_symbol_boxes = {}    # ref -> body box (stub wires must not cross OTHER symbols)
     outside_centers = {}
     for ref, inst in outside_instances.items():
         defn = local_definitions.get(inst['lib_id'])
         lb = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
         tx, ty, a_i, mx_i, my_i = get_symbol_instance_transform(inst['sexpr'])
         outside_centers[ref] = get_instance_aabb(lb, tx, ty, a_i, mx_i, my_i).center
-        parent_obstacles.append(_symbol_obstacle_box(inst['sexpr'], defn))
+        obox = _symbol_obstacle_box(inst['sexpr'], defn)
+        parent_symbol_boxes[ref] = obox
+        parent_obstacles.append(obox)
         parent_obstacles.extend(_property_box(inst['sexpr'], 'Reference', 'Value'))
     sheet_box = BoundingBox(sheet_x, sheet_y, sheet_x + sheet_w, sheet_y + sheet_h)
     sheet_center = (sheet_x + sheet_w / 2, sheet_y + sheet_h / 2)
@@ -1039,9 +1051,12 @@ def create_module_from_components(schematic_path, table_path, components, module
     routed_wires_count = 0
     for root, coords_info in net_to_pin_coords.items():
         name = boundary_nets[root]['name']
+        # sheet-pin label: its stub must not cross any outside symbol (the sheet is
+        # its own owner, so the sheet box is not in cross).
         _place_label(parent_children, parent_label_recs, parent_obstacles, parent_vfan,
                      name, coords_info['parent_pin_x'], coords_info['parent_pin_y'],
-                     sheet_center[0], sheet_center[1], 'label', None)
+                     sheet_center[0], sheet_center[1], 'label', None,
+                     list(parent_symbol_boxes.values()))
         routed_wires_count += 1
         for p in boundary_nets[root]['outside_pins']:
             gk = grid_key(p['x'], p['y'])
@@ -1049,8 +1064,10 @@ def create_module_from_components(schematic_path, table_path, components, module
                 continue
             seen_labels.add((name, gk))
             cx_o, cy_o = outside_centers.get(p['ref'], (p['x'], p['y']))
+            cross = [b for r, b in parent_symbol_boxes.items() if r != p['ref']]
+            cross.append(sheet_box)
             _place_label(parent_children, parent_label_recs, parent_obstacles, parent_vfan,
-                         name, p['x'], p['y'], cx_o, cy_o, 'label', None)
+                         name, p['x'], p['y'], cx_o, cy_o, 'label', None, cross)
             routed_wires_count += 1
 
     _reconcile_labels(parent_label_recs, parent_obstacles)
