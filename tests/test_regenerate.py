@@ -3,6 +3,8 @@ import os
 import unittest
 
 from kicad_skill.regenerate import load_gt_components
+from kicad_skill.schematic import place_symbols_and_resolve
+from kicad_skill.netlist_eval import extract_actual_netlist, compare
 
 
 class TestLoadGtComponents(unittest.TestCase):
@@ -61,3 +63,41 @@ class TestClassifyNets(unittest.TestCase):
         label, wire = classify_nets(nets, self.centers)
         self.assertEqual([n["name"] for n in label], ["TX"])
         self.assertEqual(wire, [])
+
+
+import tempfile
+import shutil
+from kicad_skill.regenerate import (
+    _write_blank_schematic, _pin_coords, _emit_labels,
+)
+
+
+class TestLabelEmission(unittest.TestCase):
+    def setUp(self):
+        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.table = os.path.join(self.base, "sym-lib-table")
+        if not os.path.exists(self.table):
+            self.skipTest("mcp_test artifacts not present")
+        self.tmp = tempfile.mkdtemp()
+        # work inside the project dir so ${KIPRJMOD} relative libs resolve
+        self.sch = os.path.join(self.base, "_tmp_label_test.kicad_sch")
+        self.addCleanup(lambda: os.path.exists(self.sch) and os.remove(self.sch))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+
+    def test_labels_join_two_pins_into_one_net(self):
+        _write_blank_schematic(self.sch)
+        place_symbols_and_resolve(self.sch, self.table, [
+            {"lib_id": "mcp_test:MCU", "reference": "U1", "value": "MCU",
+             "x": 80, "y": 80, "angle": 0.0},
+            {"lib_id": "mcp_test:MCP2515", "reference": "U2", "value": "MCP2515",
+             "x": 140, "y": 80, "angle": 0.0},
+        ], margin=2.54, resolve=True)
+        coords = _pin_coords(self.sch, self.table)
+        # U1:5 (3V3) and U2:18 (VDD) should both exist
+        self.assertIn(("U1", "5"), coords)
+        self.assertIn(("U2", "18"), coords)
+        _emit_labels(self.sch, [{"name": "VDD", "pins": ["U1:5", "U2:18"]}], coords)
+        actual = extract_actual_netlist(self.sch, self.table)
+        rep = compare(actual, [{"name": "VDD", "pins": ["U1:5", "U2:18"]}])
+        self.assertFalse(rep["fatal"], rep)
+        self.assertEqual(rep["opens"], [])
