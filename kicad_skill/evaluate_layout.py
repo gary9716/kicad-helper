@@ -237,16 +237,31 @@ def evaluate_schematic_layout(sch_path, table_path):
         if at_node:
             junction_pts.append((float(at_node[1]), float(at_node[2])))
 
+    # Label positions: a pin coincident with a local/global/hierarchical label is
+    # joined to that net by name, with no wire — KiCad treats it as connected.
+    label_pts = []
+    for l in labels:
+        at_node = next((sub for sub in l[1:] if isinstance(sub, list) and sub[0] == 'at'), None)
+        if at_node:
+            label_pts.append((float(at_node[1]), float(at_node[2])))
+
     unconnected_pins_count = 0
     for p in pins:
         px, py = p['x'], p['y']
         connected = False
-        
-        # Check wire endpoints
-        for wx, wy in all_wire_ends:
-            if abs(wx - px) < 0.05 and abs(wy - py) < 0.05:
+
+        # Check labels coincident with the pin
+        for lx, ly in label_pts:
+            if abs(lx - px) < 0.05 and abs(ly - py) < 0.05:
                 connected = True
                 break
+
+        # Check wire endpoints
+        if not connected:
+            for wx, wy in all_wire_ends:
+                if abs(wx - px) < 0.05 and abs(wy - py) < 0.05:
+                    connected = True
+                    break
                 
         # Check wire pass-through (if it lies on a wire segment)
         if not connected:
