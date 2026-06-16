@@ -166,6 +166,35 @@ def handle_place(args):
         print(f"Error placing symbols: {e}", file=sys.stderr)
         sys.exit(1)
 
+
+def handle_create_module(args):
+    # Auto-detect table path if not specified
+    table_path = args.table
+    if not table_path:
+        table_path = os.path.join(os.path.dirname(os.path.abspath(args.schematic)), "sym-lib-table")
+        if not os.path.exists(table_path):
+            print(f"Warning: sym-lib-table not found at '{table_path}'. Custom libraries might fail to load.")
+
+    components = [c.strip() for c in args.components.split(',') if c.strip()]
+    if not components:
+        print("Error: --components must not be empty.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Creating module '{args.name}' from components: {', '.join(components)}...")
+    try:
+        from .module import create_module_from_components
+        num_pins, num_wires = create_module_from_components(
+            schematic_path=args.schematic,
+            table_path=table_path,
+            components=components,
+            module_name=args.name,
+            sheet_file_name=args.sheet_file
+        )
+        print(f"Successfully created sub-sheet '{args.sheet_file}' with {num_pins} hierarchical pin(s) and routed {num_wires} connection wire(s) in parent sheet.")
+    except Exception as e:
+        print(f"Error creating module: {e}", file=sys.stderr)
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(description="KiCad Helper: Symbol Creator and Collision-Free Placement Tool")
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
@@ -220,6 +249,14 @@ def main():
     model_parser.add_argument("--params", help="Key-value parameters or JSON string for the model specs")
     model_parser.add_argument("--model-name", help="Custom name for the subcircuit model (default: matches symbol name)")
     
+    # create-module parser
+    module_parser = subparsers.add_parser("create-module", help="Create a sub-sheet from a group of components and connect boundary crossings")
+    module_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    module_parser.add_argument("--components", required=True, help="Comma-separated list of component references to move (e.g. U101,U102,R101)")
+    module_parser.add_argument("--name", required=True, help="Name of the sub-sheet module")
+    module_parser.add_argument("--sheet-file", required=True, help="Filename of the sub-sheet schematic, e.g. custom_sheet.kicad_sch")
+    module_parser.add_argument("--table", help="Path to the sym-lib-table file (default: same folder as schematic)")
+    
     args = parser.parse_args()
     
     if args.command == "create-symbol":
@@ -234,6 +271,8 @@ def main():
     elif args.command == "add-spice-model":
         from .simulation import handle_add_spice_model
         handle_add_spice_model(args)
+    elif args.command == "create-module":
+        handle_create_module(args)
     else:
         parser.print_help()
 
