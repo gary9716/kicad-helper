@@ -838,6 +838,33 @@ def add_symbol_def_to_schematic(sch_sexpr, symbol_def):
     lib_syms.append(symbol_def)
 
 
+def _add_instance_metadata(inst, defn, root_uuid, project_name, reference):
+    """Append the per-pin uuid entries and the `instances` block KiCad needs to
+    register a symbol on the root sheet's instance path.
+
+    Without this block the symbol's pins are not part of the sheet connection
+    graph, so a plain wire to a pin is reported `wire_dangling` by ERC even though
+    the pin is geometrically on the wire. (A net label sidesteps it by carrying
+    its own net name — which is why label-routing worked around the missing block.)
+    """
+    if defn:
+        seen = set()
+        for p in get_all_pins_from_symbol_def(defn):
+            num = p.get('number')
+            if num and num not in seen:
+                seen.add(num)
+                inst.append(['pin', num, ['uuid', str(uuid.uuid4())]])
+    inst.append([
+        'instances',
+        ['project', project_name,
+            ['path', f'/{root_uuid}',
+                ['reference', reference],
+                ['unit', '1'],
+            ],
+        ],
+    ])
+
+
 def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin=2.54, resolve=True,
                               bbox_overrides=None):
     """
@@ -871,7 +898,15 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
     
     if not sch_sexpr or sch_sexpr[0] != 'kicad_sch':
         raise ValueError(f"Invalid KiCad schematic file {schematic_path}")
-        
+
+    # Root sheet uuid + project name drive each symbol's instances/path block.
+    root_uuid = next((c[1] for c in sch_sexpr[1:]
+                      if isinstance(c, list) and c and c[0] == 'uuid'), None)
+    if root_uuid is None:
+        root_uuid = str(uuid.uuid4())
+        sch_sexpr.insert(1, ['uuid', root_uuid])
+    project_name = os.path.splitext(os.path.basename(schematic_path))[0]
+
     # Remove existing instances of the symbols we are placing to avoid duplicates
     new_refs = {p['reference'] for p in new_placements}
     filtered_children = []
@@ -941,6 +976,7 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
             local_bbox=local_bbox,
             symbol_def=defn
         )
+        _add_instance_metadata(inst, defn, root_uuid, project_name, placement['reference'])
         sch_sexpr.append(inst)
         new_instances.append(inst)
         

@@ -52,9 +52,9 @@ class TestWiringNeedsLabel(unittest.TestCase):
         with open(self.sch, "w") as f:
             f.write(format_sexpr(sx))
 
-    def test_wire_without_label_is_dangling(self):
+    def test_wire_without_label_is_not_dangling(self):
         self._build(with_label=False)
-        self.assertGreaterEqual(_wire_dangling_count(run_erc(self.sch)), 1)
+        self.assertEqual(_wire_dangling_count(run_erc(self.sch)), 0)
 
     def test_wire_with_label_is_clean(self):
         self._build(with_label=True)

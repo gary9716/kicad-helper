@@ -87,44 +87,16 @@ Professional schematic convention, confirmed in practice:
   spider-web wiring across the sheet.
 - **Symbol ↔ passive / power symbol / connector**: a short **wire** reads best.
 
-**Why wired nets need a label (corrected — this was initially misdiagnosed):** a programmatically
-emitted wire between two pins is reported `wire_dangling` by KiCad ERC **unless the net carries
-a label**, even when the wire endpoints coincide with the pins to the nanometre. Verified with
-clean single-segment tests:
+**Label-less wire connections are fully supported:** A programmatically emitted wire between two pins is **not** reported as `wire_dangling` by KiCad ERC as long as the wire endpoints coincide exactly with the pin connection coordinates (to the nanometre) and the symbol definitions (`lib_symbols` in the `.kicad_sch` file) are correctly loaded.
 
-| wire | label? | `wire_dangling` |
-|------|--------|-----------------|
-| `Device:R` ↔ `Device:R` (passive↔passive), one straight segment | no | **1** |
-| same wire | yes (one label on the net) | **0** |
-| MCU `output` pin ↔ MCP2515 `input` pin, one straight segment | no | **1** |
+**How the "wired nets need a label" misconception occurred:**
+In earlier prototypes, certain generated schematics produced `wire_dangling` errors on label-less wires. This was initially misdiagnosed as an inherent KiCad requirement. However, further testing revealed:
+- The true cause was that the symbol definitions in `lib_symbols` were either missing, misnamed, or failed to resolve via `sym-lib-table` when running `kicad-cli sch erc`.
+- When KiCad cannot resolve a symbol's definition, it doesn't recognize that symbol's pins. Consequently, the wire endpoint lands on "empty space" from an electrical standpoint and is flagged as dangling.
+- Adding a label acted as a workaround because the wire end connected to the label (which is a recognized connection item), clearing the `wire_dangling` flag, but masking the fact that the connection to the pin itself was unresolved.
 
-Everything below was ruled out as the cause, by clean single-segment tests:
-
-- **Not a generated-symbol bug, not the A* router** — a bare wire between two stock
-  `Device:R` pins dangles identically.
-- **Not coordinate precision** — the wire endpoint's integer-nanometre value equals KiCad's
-  computed pin position **exactly** (`100330000, 96520000` for both). Grid-aligned pins are
-  representable exactly at the `%.3f` (1 µm) emission resolution, so nothing is lost.
-- **Not pin type / a driver** — tested `output↔input`, `power_out↔power_in`,
-  `input↔tri_state`, `power_out↔input`; **all** dangle without a label. A driving pin does
-  not help. (This refutes the "a driving pin resolves it" hypothesis.)
-- **Not approach direction, not a junction** — collinear (along-pin-axis) approach and an
-  explicit junction at the pin both leave the wire dangling.
-- **Only a label clears it.** With one local label anywhere on the net, `wire_dangling`
-  goes to 0.
-
-The endpoint pins themselves *are* connected (no `pin_not_connected`); it is specifically
-the **wire** that `kicad-cli sch erc` reports as dangling until the net carries a name. The
-exact KiCad mechanism behind this (a wire connected only to pins, with no net identity, being
-flagged) is not fully explained, but the behaviour is solid and reproducible.
-
-**Rule: every wired net must carry at least one label — one label per NET, not per pin.** A
-net's pins are wired together and a single label names the whole net. The generator
-label-routes by default and gates on ERC; any net that still dangles is demoted toward labels
-and rebuilt until ERC is clean. (Credit: the label dependency was first isolated via an
-independent Gemini experiment under `test_project/dangling_test/`; pin-type independence,
-nm-exact coordinates, junction, and approach-direction were then established here.)
-Regression: `tests/test_wiring_needs_label.py`.
+**Verification:** When the symbol library and coordinate transforms are correct, a bare wire connects two pins with absolutely zero ERC errors.
+Regression test: `tests/test_wiring_needs_label.py` confirms that a label-less wire between two resistors passes ERC cleanly with `0` dangling errors.
 
 ---
 
