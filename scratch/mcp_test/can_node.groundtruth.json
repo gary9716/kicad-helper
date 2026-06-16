@@ -22,5 +22,18 @@
     {"name": "CANL",     "pins": ["U3:6", "R2:2", "J1:4"], "source": "reference 120R termination; J1:4 user-confirmed", "trust": "high", "status": "confirmed"}
   ],
   "no_connect": [],
-  "unresolved": []
+  "unresolved": [],
+  "components": {
+    "U1": {"lib_id": "mcp_test:MCU",      "value": "MCU",      "x": 74.93,  "y": 100.33, "angle": 0},
+    "U2": {"lib_id": "mcp_test:MCP2515",  "value": "MCP2515",  "x": 124.46, "y": 100.33, "angle": 0},
+    "U3": {"lib_id": "mcp_test:TJA1050",  "value": "TJA1050",  "x": 165.10, "y": 100.33, "angle": 0},
+    "R1": {"lib_id": "Device:R",          "value": "10k",      "x": 124.46, "y": 74.93,  "angle": 0},
+    "R2": {"lib_id": "Device:R",          "value": "120",      "x": 185.42, "y": 85.09,  "angle": 0},
+    "Y1": {"lib_id": "Device:Crystal",    "value": "16MHz",    "x": 124.46, "y": 124.46, "angle": 0},
+    "C1": {"lib_id": "Device:C",          "value": "22pF",     "x": 114.30, "y": 137.16, "angle": 0},
+    "C2": {"lib_id": "Device:C",          "value": "22pF",     "x": 134.62, "y": 137.16, "angle": 0},
+    "C3": {"lib_id": "Device:C",          "value": "0.1uF",    "x": 104.14, "y": 85.09,  "angle": 0},
+    "C4": {"lib_id": "Device:C",          "value": "0.1uF",    "x": 144.78, "y": 85.09,  "angle": 0},
+    "J1": {"lib_id": "Connector_Generic:Conn_01x04", "value": "CONN_CAN", "x": 209.55, "y": 100.33, "angle": 0}
+  }
 }
