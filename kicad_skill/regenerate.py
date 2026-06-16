@@ -216,3 +216,26 @@ def _centers_from_schematic(sch_path):
         if ref and at:
             centers[ref] = at
     return centers
+
+
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(
+        prog="regenerate-from-gt",
+        description="Generate a clean flat schematic from a ground-truth netlist.")
+    parser.add_argument("--ground-truth", required=True)
+    parser.add_argument("--table", required=True)
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args(argv)
+
+    out_path, rep = regenerate_schematic(args.ground_truth, args.table, args.out)
+    status = "FATAL" if rep["fatal"] else "CLEAN"
+    print(f"[{status}] wrote {out_path}")
+    print(f"  GT nets: {len(rep['ok'])} ok, "
+          f"{len(rep['shorts'])} shorts, {len(rep['opens'])} opens, "
+          f"{len(rep['missing'])} missing pins")
+    return 1 if rep["fatal"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
