@@ -166,6 +166,58 @@ def handle_place(args):
         print(f"Error placing symbols: {e}", file=sys.stderr)
         sys.exit(1)
 
+
+def handle_simplify_wires(args):
+    table_path = args.table
+    if not table_path:
+        table_path = os.path.join(os.path.dirname(os.path.abspath(args.schematic)), "sym-lib-table")
+    from .wire_complexity import simplify_wires
+    weights = {"crossings": args.wc, "bends": args.wb, "length": args.wl}
+    try:
+        res = simplify_wires(
+            sch_path=args.schematic, table_path=table_path,
+            threshold=args.threshold, weights=weights,
+            max_conversions=args.max_conversions, dry_run=args.dry_run,
+        )
+    except Exception as e:
+        print(f"Error simplifying wires: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Total complexity: {res['total_before']:.1f} -> {res['total_after']:.1f}"
+          + (" (dry-run)" if args.dry_run else ""))
+    for c in res["converted"]:
+        print(f"  CONVERTED {c['pin_a']} <-> {c['pin_b']} as label '{c['net_name']}' (score {c['score']:.1f})")
+    for s in res["skipped_unsafe"]:
+        print(f"  SKIPPED   {s['pin_a']} <-> {s['pin_b']}: {s['reason']}")
+
+
+def handle_create_module(args):
+    # Auto-detect table path if not specified
+    table_path = args.table
+    if not table_path:
+        table_path = os.path.join(os.path.dirname(os.path.abspath(args.schematic)), "sym-lib-table")
+        if not os.path.exists(table_path):
+            print(f"Warning: sym-lib-table not found at '{table_path}'. Custom libraries might fail to load.")
+
+    components = [c.strip() for c in args.components.split(',') if c.strip()]
+    if not components:
+        print("Error: --components must not be empty.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Creating module '{args.name}' from components: {', '.join(components)}...")
+    try:
+        from .module import create_module_from_components
+        num_pins, num_wires = create_module_from_components(
+            schematic_path=args.schematic,
+            table_path=table_path,
+            components=components,
+            module_name=args.name,
+            sheet_file_name=args.sheet_file
+        )
+        print(f"Successfully created sub-sheet '{args.sheet_file}' with {num_pins} hierarchical pin(s) and routed {num_wires} connection wire(s) in parent sheet.")
+    except Exception as e:
+        print(f"Error creating module: {e}", file=sys.stderr)
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(description="KiCad Helper: Symbol Creator and Collision-Free Placement Tool")
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
@@ -220,6 +272,25 @@ def main():
     model_parser.add_argument("--params", help="Key-value parameters or JSON string for the model specs")
     model_parser.add_argument("--model-name", help="Custom name for the subcircuit model (default: matches symbol name)")
     
+    # create-module parser
+    module_parser = subparsers.add_parser("create-module", help="Create a sub-sheet from a group of components and connect boundary crossings")
+    module_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    module_parser.add_argument("--components", required=True, help="Comma-separated list of component references to move (e.g. U101,U102,R101)")
+    module_parser.add_argument("--name", required=True, help="Name of the sub-sheet module")
+    module_parser.add_argument("--sheet-file", required=True, help="Filename of the sub-sheet schematic, e.g. custom_sheet.kicad_sch")
+    module_parser.add_argument("--table", help="Path to the sym-lib-table file (default: same folder as schematic)")
+
+    # simplify-wires parser
+    simp_parser = subparsers.add_parser("simplify-wires", help="Convert high-complexity wires to local labels")
+    simp_parser.add_argument("--schematic", required=True, help="Path to the .kicad_sch file")
+    simp_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
+    simp_parser.add_argument("--threshold", type=float, default=50.0, help="Total complexity target (default: 50)")
+    simp_parser.add_argument("--max", type=int, default=None, dest="max_conversions", help="Max conversions")
+    simp_parser.add_argument("--wc", type=float, default=10.0, help="Crossing weight (default: 10)")
+    simp_parser.add_argument("--wb", type=float, default=2.0, help="Bend weight (default: 2)")
+    simp_parser.add_argument("--wl", type=float, default=0.5, help="Length weight (default: 0.5)")
+    simp_parser.add_argument("--dry-run", action="store_true", help="Report plan without writing")
+
     args = parser.parse_args()
     
     if args.command == "create-symbol":
@@ -234,6 +305,10 @@ def main():
     elif args.command == "add-spice-model":
         from .simulation import handle_add_spice_model
         handle_add_spice_model(args)
+    elif args.command == "create-module":
+        handle_create_module(args)
+    elif args.command == "simplify-wires":
+        handle_simplify_wires(args)
     else:
         parser.print_help()
 
