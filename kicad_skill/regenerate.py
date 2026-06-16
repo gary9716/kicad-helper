@@ -32,3 +32,29 @@ def load_gt_components(gt):
     if missing:
         raise ValueError(f"components block missing entries for refs: {', '.join(missing)}")
     return nets, components
+
+
+import math
+
+ADJ_THRESHOLD = 30.0  # mm; two components closer than this can share a short wire
+POWER_NAMES = {"VDD", "VCC", "VSS", "GND", "VBUS", "V+", "V-", "3V3", "5V", "GNDA", "VDDA"}
+
+
+def _is_power(name):
+    u = name.upper()
+    return u in POWER_NAMES or u.startswith("GND") or u.startswith("VDD") or u.startswith("VCC")
+
+
+def classify_nets(nets, centers):
+    """Split nets into (label_nets, wire_nets). See module docstring / spec."""
+    label_nets, wire_nets = [], []
+    for net in nets:
+        pins = net["pins"]
+        refs = [p.split(":")[0] for p in pins]
+        wireable = False
+        if not _is_power(net["name"]) and len(pins) == 2 and refs[0] != refs[1]:
+            a, b = centers.get(refs[0]), centers.get(refs[1])
+            if a and b and math.dist(a, b) < ADJ_THRESHOLD:
+                wireable = True
+        (wire_nets if wireable else label_nets).append(net)
+    return label_nets, wire_nets
