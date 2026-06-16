@@ -21,6 +21,7 @@ from kicad_skill.schematic import (
 )
 from kicad_skill.module import get_symbol_pins_global
 from kicad_skill.netlist_eval import extract_actual_netlist, compare, load_ground_truth
+from kicad_skill.erc import find_kicad_cli, run_erc
 
 
 def load_gt_components(gt):
@@ -45,16 +46,41 @@ def _is_power(name):
     return u in POWER_NAMES or u.startswith("GND") or u.startswith("VDD") or u.startswith("VCC")
 
 
-def classify_nets(nets, centers):
-    """Split nets into (label_nets, wire_nets). See module docstring / spec."""
+def _component_kind(lib_id):
+    """Classify a component by its lib_id: 'passive', 'connector', 'power', or 'ic'."""
+    if not lib_id:
+        return "ic"
+    if lib_id.startswith("Connector"):
+        return "connector"
+    if "power" in lib_id.lower():
+        return "power"
+    if lib_id.startswith("Device:"):
+        return "passive"
+    return "ic"
+
+
+def classify_nets(nets, components, centers):
+    """Split nets into (label_nets, wire_nets).
+
+    Golden rule (user guidance): a normal symbol connecting to a passive, a power
+    symbol, or a connector reads best as a short wire; symbol-to-symbol (IC<->IC)
+    reads best as a local label. Wire-routing is restricted to adjacent 2-pin
+    pairs. Power/ground rails are always labels (they fan out widely).
+
+    This is an optimistic classification: the ERC gate in regenerate_schematic
+    demotes any wire that fails to connect back to a label, so correctness never
+    depends on getting this exactly right.
+    """
     label_nets, wire_nets = [], []
     for net in nets:
         pins = net["pins"]
         refs = [p.split(":")[0] for p in pins]
         wireable = False
         if not _is_power(net["name"]) and len(pins) == 2 and refs[0] != refs[1]:
+            kinds = [_component_kind(components.get(r, {}).get("lib_id", "")) for r in refs]
+            touches_non_ic = any(k != "ic" for k in kinds)
             a, b = centers.get(refs[0]), centers.get(refs[1])
-            if a and b and math.dist(a, b) < ADJ_THRESHOLD:
+            if touches_non_ic and a and b and math.dist(a, b) < ADJ_THRESHOLD:
                 wireable = True
         (wire_nets if wireable else label_nets).append(net)
     return label_nets, wire_nets
@@ -150,50 +176,80 @@ def _placements_from_components(components):
     return placements
 
 
-def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None):
+def _build_once(out_sch, table_path, nets, components, placements, forced_labels):
+    """Place symbols and route one pass; nets in forced_labels are label-routed.
+
+    Returns the list of wire-net names actually emitted as wires this pass.
+    """
+    _write_blank_schematic(out_sch)
+    place_symbols_and_resolve(out_sch, table_path, placements, margin=2.54, resolve=True)
+    coords = _pin_coords(out_sch, table_path)
+    centers = _centers_from_schematic(out_sch)
+
+    label_nets, wire_nets = classify_nets(nets, components, centers)
+    demoted = [n for n in wire_nets if n["name"] in forced_labels]
+    wire_nets = [n for n in wire_nets if n["name"] not in forced_labels]
+    label_nets = label_nets + demoted
+
+    _emit_labels(out_sch, label_nets, coords)
+    for net in wire_nets:
+        a, b = net["pins"]
+        connect_symbols_in_schematic(out_sch, table_path, [{"from": a, "to": b}], orthogonal=True)
+    return [n["name"] for n in wire_nets]
+
+
+def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=True):
     """Build a clean flat schematic from the ground-truth netlist.
 
-    Returns (out_sch, report). Raises if a fatal report survives the
-    all-labels configuration (GT/geometry contradiction).
+    The gate is KiCad's own ERC (authoritative) when kicad-cli is available,
+    backed by the ground-truth netlist comparison for logical correctness. Any
+    ERC error (short, open, wire_dangling, label_dangling) demotes the pass's
+    wire-routed nets to labels and rebuilds; the all-labels configuration is
+    electrically clean, so the loop converges. When kicad-cli is absent it falls
+    back to the ground-truth comparison alone.
+
+    Returns (out_sch, report). The report always carries the ground-truth
+    comparison keys plus, when ERC ran, erc_error_count and erc_violations.
     """
     gt = load_ground_truth(gt_path)
     nets, components = load_gt_components(gt)
     placements = _placements_from_components(components)
 
-    forced_labels = set()  # net names demoted from wire to label after a short/open
+    forced_labels = set()
     if max_iter is None:
         max_iter = len(nets) + 1
+    erc_available = use_erc and find_kicad_cli() is not None
 
     for _ in range(max_iter):
-        _write_blank_schematic(out_sch)
-        place_symbols_and_resolve(out_sch, table_path, placements, margin=2.54, resolve=True)
-        coords = _pin_coords(out_sch, table_path)
-        centers = _centers_from_schematic(out_sch)
+        wire_names = set(_build_once(out_sch, table_path, nets, components, placements, forced_labels))
+        rep = compare(extract_actual_netlist(out_sch, table_path), nets)
 
-        label_nets, wire_nets = classify_nets(nets, centers)
-        # Apply demotions from previous iterations.
-        demoted = [n for n in wire_nets if n["name"] in forced_labels]
-        wire_nets = [n for n in wire_nets if n["name"] not in forced_labels]
-        label_nets = label_nets + demoted
+        if erc_available:
+            erc = run_erc(out_sch)
+            rep["erc_error_count"] = erc["error_count"]
+            rep["erc_violations"] = erc["violations"]
+            if erc["ok"] and not rep["fatal"]:
+                return out_sch, rep
+            # Demote this pass's wires to labels (all-labels is ERC-clean).
+            remaining = wire_names - forced_labels
+            if not remaining:
+                raise RuntimeError(
+                    f"regenerate failed ERC with all nets label-routed: "
+                    f"{erc['violations'] if not erc['ok'] else rep}")
+            forced_labels |= remaining
+            continue
 
-        _emit_labels(out_sch, label_nets, coords)
-        for net in wire_nets:
-            a, b = net["pins"]
-            connect_symbols_in_schematic(out_sch, table_path, [{"from": a, "to": b}], orthogonal=True)
-
-        actual = extract_actual_netlist(out_sch, table_path)
-        rep = compare(actual, nets)
+        # No kicad-cli: gate on the ground-truth comparison alone.
         if not rep["fatal"]:
             return out_sch, rep
-
-        # Demote every wire-net implicated in a short/open and retry.
         offenders = {n for s in rep["shorts"] for n in s["gt_nets"]}
         offenders |= {o["gt_net"] for o in rep["opens"]}
-        wire_names = {n["name"] for n in wire_nets}
         newly = offenders & wire_names
         if not newly:
             raise RuntimeError(f"regenerate failed: fatal report not fixable by label demotion: {rep}")
         forced_labels |= newly
+
+    raise RuntimeError("regenerate did not converge")
 
     raise RuntimeError("regenerate did not converge")
 

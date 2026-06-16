@@ -35,32 +35,53 @@ from kicad_skill.regenerate import classify_nets
 
 class TestClassifyNets(unittest.TestCase):
     def setUp(self):
+        # U1/U2/U3 are ICs; R2 is a passive; J1 a connector.
+        self.components = {
+            "U1": {"lib_id": "lib:MCU"}, "U2": {"lib_id": "lib:CHIP"},
+            "U3": {"lib_id": "lib:CHIP"}, "R2": {"lib_id": "Device:R"},
+            "J1": {"lib_id": "Connector_Generic:Conn_01x04"},
+        }
         self.centers = {
             "U1": (0, 0), "U2": (5, 0),     # adjacent
             "U3": (200, 0),                  # far away
             "R2": (6, 0),                    # adjacent to U2
+            "J1": (7, 0),                    # adjacent to U2
         }
 
+    def cls(self, nets):
+        return classify_nets(nets, self.components, self.centers)
+
     def test_power_named_net_is_label_routed(self):
-        nets = [{"name": "GND", "pins": ["U1:1", "U2:1"]}]  # 2-pin, adjacent, but power
-        label, wire = classify_nets(nets, self.centers)
+        nets = [{"name": "GND", "pins": ["U2:1", "R2:1"]}]  # touches passive but power
+        label, wire = self.cls(nets)
         self.assertEqual([n["name"] for n in label], ["GND"])
         self.assertEqual(wire, [])
 
-    def test_three_pin_net_is_label_routed(self):
-        nets = [{"name": "SIG", "pins": ["U1:2", "U2:2", "R2:1"]}]
-        label, wire = classify_nets(nets, self.centers)
-        self.assertEqual([n["name"] for n in label], ["SIG"])
+    def test_ic_to_ic_adjacent_net_is_label_routed(self):
+        nets = [{"name": "SPI", "pins": ["U1:2", "U2:2"]}]  # both ICs, adjacent
+        label, wire = self.cls(nets)
+        self.assertEqual([n["name"] for n in label], ["SPI"])
+        self.assertEqual(wire, [])
 
-    def test_two_pin_adjacent_net_is_wire_routed(self):
-        nets = [{"name": "OSC1", "pins": ["U2:7", "R2:1"]}]
-        label, wire = classify_nets(nets, self.centers)
-        self.assertEqual([n["name"] for n in wire], ["OSC1"])
+    def test_ic_to_passive_adjacent_net_is_wire_routed(self):
+        nets = [{"name": "RESET", "pins": ["U2:7", "R2:1"]}]  # IC<->passive, adjacent
+        label, wire = self.cls(nets)
+        self.assertEqual([n["name"] for n in wire], ["RESET"])
         self.assertEqual(label, [])
 
+    def test_ic_to_connector_adjacent_net_is_wire_routed(self):
+        nets = [{"name": "CANH", "pins": ["U2:3", "J1:3"]}]  # IC<->connector, adjacent
+        label, wire = self.cls(nets)
+        self.assertEqual([n["name"] for n in wire], ["CANH"])
+
+    def test_three_pin_net_is_label_routed(self):
+        nets = [{"name": "SIG", "pins": ["U1:2", "U2:2", "R2:1"]}]
+        label, wire = self.cls(nets)
+        self.assertEqual([n["name"] for n in label], ["SIG"])
+
     def test_two_pin_distant_net_is_label_routed(self):
-        nets = [{"name": "TX", "pins": ["U1:3", "U3:1"]}]  # U1 near origin, U3 far
-        label, wire = classify_nets(nets, self.centers)
+        nets = [{"name": "TX", "pins": ["U2:3", "U3:1"]}]  # adjacent? U3 far -> label
+        label, wire = self.cls(nets)
         self.assertEqual([n["name"] for n in label], ["TX"])
         self.assertEqual(wire, [])
 

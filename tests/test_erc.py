@@ -28,16 +28,27 @@ class TestRunErc(unittest.TestCase):
         if not os.path.exists(self.gt):
             self.skipTest("mcp_test artifacts not present")
 
-    def test_detects_wire_dangling_on_regenerated_schematic(self):
-        # The current generator leaves a dangling RESET wire; run_erc must surface it.
+    def test_detects_wire_dangling_when_erc_gate_disabled(self):
+        # Without the ERC gate, wire-routing the RESET net leaves a dangling wire
+        # that the hand-rolled netlist model misses; run_erc must surface it.
         from kicad_skill.regenerate import regenerate_schematic
         out = os.path.join(self.base, "_erc_dangling.kicad_sch")
         self.addCleanup(lambda: os.path.exists(out) and os.remove(out))
-        regenerate_schematic(self.gt, self.table, out)
+        regenerate_schematic(self.gt, self.table, out, use_erc=False)
         rep = run_erc(out)
         types = {v["type"] for v in rep["violations"]}
         self.assertIn("wire_dangling", types)
         self.assertTrue(rep["error_count"] >= 1)
+
+    def test_erc_gated_regeneration_is_clean(self):
+        # The default ERC-gated regeneration demotes any dangling wire to a label
+        # until KiCad ERC reports zero errors.
+        from kicad_skill.regenerate import regenerate_schematic
+        out = os.path.join(self.base, "_erc_gated.kicad_sch")
+        self.addCleanup(lambda: os.path.exists(out) and os.remove(out))
+        _, report = regenerate_schematic(self.gt, self.table, out)
+        self.assertEqual(report["erc_error_count"], 0, report.get("erc_violations"))
+        self.assertEqual(run_erc(out)["error_count"], 0)
 
     def test_clean_all_label_schematic_has_no_errors(self):
         # All-label routing is electrically clean -> ERC reports zero errors.
