@@ -74,10 +74,17 @@ class TestClassifyNets(unittest.TestCase):
         label, wire = self.cls(nets)
         self.assertEqual([n["name"] for n in wire], ["CANH"])
 
-    def test_three_pin_net_is_label_routed(self):
+    def test_three_pin_local_passive_net_is_wire_routed(self):
+        # A multi-pin local cluster touching a passive is wired directly.
         nets = [{"name": "SIG", "pins": ["U1:2", "U2:2", "R2:1"]}]
         label, wire = self.cls(nets)
-        self.assertEqual([n["name"] for n in label], ["SIG"])
+        self.assertEqual([n["name"] for n in wire], ["SIG"])
+
+    def test_three_pin_ic_only_net_is_label_routed(self):
+        # No passive/connector in the net -> label even if local.
+        nets = [{"name": "BUS", "pins": ["U1:2", "U2:2", "U2:5"]}]
+        label, wire = self.cls(nets)
+        self.assertEqual([n["name"] for n in label], ["BUS"])
 
     def test_two_pin_distant_net_is_label_routed(self):
         nets = [{"name": "TX", "pins": ["U2:3", "U3:1"]}]  # adjacent? U3 far -> label

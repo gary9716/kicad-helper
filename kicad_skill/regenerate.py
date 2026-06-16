@@ -40,7 +40,7 @@ def load_gt_components(gt):
 
 import math
 
-ADJ_THRESHOLD = 30.0  # mm; two components closer than this can share a short wire
+ADJ_THRESHOLD = 35.0  # mm; components within this form a local cluster wired directly
 POWER_NAMES = {"VDD", "VCC", "VSS", "GND", "VBUS", "V+", "V-", "3V3", "5V", "GNDA", "VDDA"}
 
 
@@ -78,12 +78,16 @@ def classify_nets(nets, components, centers):
     for net in nets:
         pins = net["pins"]
         refs = [p.split(":")[0] for p in pins]
+        distinct = list(dict.fromkeys(refs))
         wireable = False
-        if not _is_power(net["name"]) and len(pins) == 2 and refs[0] != refs[1]:
+        if not _is_power(net["name"]) and len(distinct) >= 2:
             kinds = [_component_kind(components.get(r, {}).get("lib_id", "")) for r in refs]
             touches_non_ic = any(k != "ic" for k in kinds)
-            a, b = centers.get(refs[0]), centers.get(refs[1])
-            if touches_non_ic and a and b and math.dist(a, b) < ADJ_THRESHOLD:
+            pts = [centers.get(r) for r in distinct]
+            local = all(pts) and all(
+                math.dist(pts[i], pts[j]) < ADJ_THRESHOLD
+                for i in range(len(pts)) for j in range(i + 1, len(pts)))
+            if touches_non_ic and local:
                 wireable = True
         (wire_nets if wireable else label_nets).append(net)
     return label_nets, wire_nets
@@ -233,6 +237,12 @@ def _label_padded_bboxes(components, nets, table_path, project_dir):
                 h_ext = max(h_ext, ext)
             else:
                 v_ext = max(v_ext, ext)
+        # The Reference (e.g. "U2") and Value (e.g. "MCP2515", "0.1uF") text fields
+        # are drawn just outside the body and overlap neighbours too. Reserve for the
+        # wider of the two horizontally, and a text row vertically, on every side.
+        text_w = max(len(ref), len(c.get("value", ""))) * _LABEL_CHAR_WIDTH
+        h_ext = max(h_ext, text_w / 2.0)
+        v_ext = max(v_ext, 2.54 + 1.27)
         out[ref] = BoundingBox(bbox.xmin - h_ext, bbox.ymin - v_ext,
                                bbox.xmax + h_ext, bbox.ymax + v_ext)
     return out
@@ -257,8 +267,9 @@ def _build_once(out_sch, table_path, nets, components, placements, forced_labels
 
     _emit_labels(out_sch, label_nets, coords)
     for net in wire_nets:
-        a, b = net["pins"]
-        connect_symbols_in_schematic(out_sch, table_path, [{"from": a, "to": b}], orthogonal=True)
+        pins = net["pins"]
+        conns = [{"from": pins[i], "to": pins[i + 1]} for i in range(len(pins) - 1)]
+        connect_symbols_in_schematic(out_sch, table_path, conns, orthogonal=True)
     return [n["name"] for n in wire_nets]
 
 
