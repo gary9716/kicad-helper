@@ -73,5 +73,24 @@ class TestRunErc(unittest.TestCase):
         self.assertEqual(rep["error_count"], 0, rep["violations"])
 
 
+class TestRoutingModes(unittest.TestCase):
+    def setUp(self):
+        if find_kicad_cli() is None:
+            self.skipTest("kicad-cli not installed")
+        self.base = os.path.join(os.path.dirname(__file__), "..", "scratch", "mcp_test")
+        self.table = os.path.join(self.base, "sym-lib-table")
+        self.gt = os.path.join(self.base, "can_node.groundtruth.json")
+        if not os.path.exists(self.gt):
+            self.skipTest("mcp_test artifacts not present")
+
+    def test_all_wire_routing_is_erc_clean(self):
+        # Bare wires connect (instances-block fix), so an all-wire flat is clean.
+        from kicad_skill.regenerate import regenerate_schematic
+        out = os.path.join(self.base, "_route_wires.kicad_sch")
+        self.addCleanup(lambda: os.path.exists(out) and os.remove(out))
+        _, rep = regenerate_schematic(self.gt, self.table, out, routing="wires")
+        self.assertEqual(rep["erc_error_count"], 0, rep.get("erc_violations"))
+
+
 if __name__ == "__main__":
     unittest.main()

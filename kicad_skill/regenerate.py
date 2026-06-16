@@ -249,8 +249,12 @@ def _label_padded_bboxes(components, nets, table_path, project_dir):
 
 
 def _build_once(out_sch, table_path, nets, components, placements, forced_labels,
-                bbox_overrides=None):
+                bbox_overrides=None, routing="auto"):
     """Place symbols and route one pass; nets in forced_labels are label-routed.
+
+    routing: "auto" classifies per the golden rule; "wires" routes every net with
+    wires (now that bare wires connect — useful for feeding create_module, whose
+    boundary detection is wire-based); "labels" routes every net with labels.
 
     Returns the list of wire-net names actually emitted as wires this pass.
     """
@@ -260,7 +264,12 @@ def _build_once(out_sch, table_path, nets, components, placements, forced_labels
     coords = _pin_coords(out_sch, table_path)
     centers = _centers_from_schematic(out_sch)
 
-    label_nets, wire_nets = classify_nets(nets, components, centers)
+    if routing == "wires":
+        label_nets, wire_nets = [], list(nets)
+    elif routing == "labels":
+        label_nets, wire_nets = list(nets), []
+    else:
+        label_nets, wire_nets = classify_nets(nets, components, centers)
     demoted = [n for n in wire_nets if n["name"] in forced_labels]
     wire_nets = [n for n in wire_nets if n["name"] not in forced_labels]
     label_nets = label_nets + demoted
@@ -273,7 +282,7 @@ def _build_once(out_sch, table_path, nets, components, placements, forced_labels
     return [n["name"] for n in wire_nets]
 
 
-def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=True):
+def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=True, routing="auto"):
     """Build a clean flat schematic from the ground-truth netlist.
 
     The gate is KiCad's own ERC (authoritative) when kicad-cli is available,
@@ -299,7 +308,7 @@ def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=Tr
 
     for _ in range(max_iter):
         wire_names = set(_build_once(out_sch, table_path, nets, components, placements,
-                                     forced_labels, bbox_overrides))
+                                     forced_labels, bbox_overrides, routing))
         rep = compare(extract_actual_netlist(out_sch, table_path), nets)
 
         if erc_available:
