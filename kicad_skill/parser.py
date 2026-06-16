@@ -100,7 +100,8 @@ def format_sexpr(node, indent_level=0, parent_tag=None, is_tag=False, child_idx=
             QUOTED_VAL_TAGS = {'property', 'name', 'number', 'symbol', 'uuid', 'generator', 'generator_version', 'lib_id'}
             VALID_PIN_TYPES = {
                 'input', 'output', 'bidirectional', 'tri_state', 'passive',
-                'free', 'unspecified', 'power_in', 'power_out', 'open_collector', 'open_emitter'
+                'free', 'unspecified', 'power_in', 'power_out', 'open_collector',
+                'open_emitter', 'no_connect'
             }
             should_quote = False
             if not is_tag:

@@ -63,7 +63,7 @@ def main():
     # Battery Symbol
     bat_pins = [
         {"side": "left", "number": "1", "name": "VCC", "type": "power_out"},
-        {"side": "right", "number": "2", "name": "GND", "type": "power_out"}
+        {"side": "right", "number": "2", "name": "GND", "type": "passive"}
     ]
     bat_sym = generate_symbol_sexpr("KEYSTONE_2466", bat_pins, ref_prefix="BT", width=12.7, height=12.7)
     save_symbol_to_library(lib_path, bat_sym)

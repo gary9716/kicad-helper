@@ -186,7 +186,7 @@ def main():
     # Battery Holder (THT Keystone 2466 1xAAA)
     bat_pins = [
         {"side": "left", "number": "1", "name": "VCC", "type": "power_out"},
-        {"side": "right", "number": "2", "name": "GND", "type": "power_out"}
+        {"side": "right", "number": "2", "name": "GND", "type": "passive"}
     ]
     bat_sym = generate_symbol_sexpr("KEYSTONE_2466", bat_pins, ref_prefix="BT", width=12.7, height=12.7)
     save_symbol_to_library(lib_path, bat_sym)
@@ -195,7 +195,7 @@ def main():
     sw_pins = [
         {"side": "left", "number": "1", "name": "COM", "type": "passive"},
         {"side": "right", "number": "2", "name": "NO", "type": "passive"},
-        {"side": "bottom", "number": "3", "name": "NC", "type": "passive"}
+        {"side": "bottom", "number": "3", "name": "NC", "type": "no_connect"}
     ]
     sw_sym = generate_symbol_sexpr("OS102011MS2Q", sw_pins, ref_prefix="SW", width=10.16, height=10.16)
     save_symbol_to_library(lib_path, sw_sym)

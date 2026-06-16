@@ -308,7 +308,7 @@
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "9119266f-310b-4c03-9ac4-97d6d00ca2a9")
+		(uuid "ba3b7b45-b9b0-4726-923e-dc203151a03c")
 		(property "Reference" "R1"
 			(at 102.870 85.090 0.0)
 			(effects (font (size 1.27 1.27)))
@@ -331,6 +331,16 @@
 				(hide yes)
 			)
 		)
+		(pin "1" (uuid "cc476c8f-81cb-43ab-aa1d-2a29a4510fd8"))
+		(pin "2" (uuid "2b27cccf-ecca-48db-916c-d7265ac2b55a"))
+		(instances
+			(project dangling_test
+				(path "/r"
+					(reference R1)
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Device:C")
@@ -338,7 +348,7 @@
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "d088fa5c-ad09-4c7f-9224-1aacecbf6db6")
+		(uuid "0d5b0251-8aef-4f91-97b9-b07fd98f982a")
 		(property "Reference" "C1"
 			(at 121.920 83.312 0.0)
 			(effects (font (size 1.27 1.27)))
@@ -361,6 +371,16 @@
 				(hide yes)
 			)
 		)
+		(pin "1" (uuid "1feb94b6-ef1c-4e99-918f-ba5ff7472ac9"))
+		(pin "2" (uuid "c09de981-8937-4199-adfc-787a33ded814"))
+		(instances
+			(project dangling_test
+				(path "/r"
+					(reference C1)
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "dangling_test:MY_RESISTOR")
@@ -368,7 +388,7 @@
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "08f8f330-719b-4389-bec7-d9d155e44026")
+		(uuid "74582c14-29b4-462b-aee3-6cb85cbabf26")
 		(property "Reference" "R2"
 			(at 99.060 124.460 0.0)
 			(effects (font (size 1.27 1.27)))
@@ -391,6 +411,16 @@
 				(hide yes)
 			)
 		)
+		(pin "1" (uuid "ed988429-9a6f-4d6f-842a-9692bfb0466c"))
+		(pin "2" (uuid "b9f81359-91bf-4417-805f-12262ddaa32b"))
+		(instances
+			(project dangling_test
+				(path "/r"
+					(reference R2)
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "dangling_test:MY_CAPACITOR")
@@ -398,7 +428,7 @@
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "77783b9b-d835-4e48-aa09-d028e46411dc")
+		(uuid "32a5352f-e27b-480b-90c3-22216179856c")
 		(property "Reference" "C2"
 			(at 119.380 124.460 0.0)
 			(effects (font (size 1.27 1.27)))
@@ -421,17 +451,27 @@
 				(hide yes)
 			)
 		)
+		(pin "1" (uuid "2e8608ef-c8bd-4670-b59a-a86976d5bf0a"))
+		(pin "2" (uuid "1e6ef9a9-ad23-42af-b610-430e9ed36854"))
+		(instances
+			(project dangling_test
+				(path "/r"
+					(reference C2)
+					(unit 1)
+				)
+			)
+		)
 	)
-	(wire (pts (xy 100.33 83.82) (xy 119.38 76.2)) (stroke (width 0) (type default)) (uuid "b8b36837-52ff-4070-9f98-ea29576714c0"))
-	(wire (pts (xy 106.68 119.38) (xy 111.76 119.38)) (stroke (width 0) (type default)) (uuid "c5acfefe-6aa2-4cac-92a4-1e6c2bbec8a0"))
+	(wire (pts (xy 100.33 83.82) (xy 119.38 76.2)) (stroke (width 0) (type default)) (uuid "dc52260a-98eb-4b3e-8717-3a1550ad3634"))
+	(wire (pts (xy 106.68 119.38) (xy 111.76 119.38)) (stroke (width 0) (type default)) (uuid "c3cfe577-82c9-414d-aa43-0b9b203185a8"))
 	(label TEST_NET
 		(at 109.22 119.38 0)
 		(effects (font (size 1.27 1.27)))
-		(uuid "93e9bcb2-ffc6-48a1-86a3-60516f4ee567")
+		(uuid "405bad42-8f10-4489-808b-99b8e46f4992")
 	)
 	(label TEST_NET2
 		(at 109.855 80.01 0)
 		(effects (font (size 1.27 1.27)))
-		(uuid "9ff88e93-fea9-478c-baa5-a33ac79b2c4c")
+		(uuid "d0c0315a-4750-49f0-8e8f-c35f87d4f9ab")
 	)
 )

@@ -52,7 +52,7 @@
 						(effects (font (size 1.27 1.27)))
 					)
 				)
-				(pin power_out line
+				(pin passive line
 					(at 7.62 0.00 180)
 					(length 2.54)
 					(name "GND"
@@ -184,18 +184,18 @@
 		)
 	)
 	(symbol
-		(lib_id spice_demo:KEYSTONE_2466)
+		(lib_id "spice_demo:KEYSTONE_2466")
 		(at 69.850 80.010 0.0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "84846cc5-df7a-4477-bf6f-cb23866c17af")
+		(uuid "38ac9cd0-2734-4e92-bb24-622d15bf104d")
 		(property "Reference" "BT1"
-			(at 69.850 72.390 0.0)
+			(at 69.850 87.630 0.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Value" "KEYSTONE_2466"
-			(at 69.850 87.630 0.0)
+			(at 69.850 72.390 0.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Footprint" "Battery:BatteryHolder_Keystone_2466_1xAAA"
@@ -214,18 +214,18 @@
 		)
 	)
 	(symbol
-		(lib_id spice_demo:R)
+		(lib_id "spice_demo:R")
 		(at 110.490 69.850 0.0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "824a59f6-6656-43d5-a2c8-04a44835965e")
+		(uuid "937da706-f175-453f-b94a-f481fa5989ae")
 		(property "Reference" "R1"
-			(at 110.490 64.770 0.0)
+			(at 110.490 74.930 0.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Value" "10k"
-			(at 110.490 74.930 0.0)
+			(at 110.490 64.770 0.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
@@ -244,18 +244,18 @@
 		)
 	)
 	(symbol
-		(lib_id spice_demo:C)
+		(lib_id "spice_demo:C")
 		(at 110.490 90.170 90.0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "be2c0191-8cd1-4591-97ea-c759f6a03005")
+		(uuid "0925ca8d-8657-4eff-8741-7939b5688a5d")
 		(property "Reference" "C1"
-			(at 115.570 90.170 90.0)
+			(at 105.410 90.170 90.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Value" "100nF"
-			(at 105.410 90.170 90.0)
+			(at 115.570 90.170 90.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Footprint" "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P2.54mm"
@@ -274,18 +274,18 @@
 		)
 	)
 	(symbol
-		(lib_id spice_demo:R)
+		(lib_id "spice_demo:R")
 		(at 149.860 69.850 0.0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "9d1b9f92-c82c-42fa-9635-8d80d0edc3b5")
+		(uuid "531a61d6-2c52-4f3a-a2a2-59b7d8638e92")
 		(property "Reference" "R2"
-			(at 149.860 64.770 0.0)
+			(at 149.860 74.930 0.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Value" "10k"
-			(at 149.860 74.930 0.0)
+			(at 149.860 64.770 0.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
@@ -304,18 +304,18 @@
 		)
 	)
 	(symbol
-		(lib_id spice_demo:R)
+		(lib_id "spice_demo:R")
 		(at 149.860 90.170 90.0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
-		(uuid "caad0c84-3b76-487b-a6de-5cb1f856e7ec")
+		(uuid "e23fddea-f996-40d5-b2a3-d947221a0e8d")
 		(property "Reference" "R3"
-			(at 154.940 90.170 90.0)
+			(at 144.780 90.170 90.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Value" "10k"
-			(at 144.780 90.170 90.0)
+			(at 154.940 90.170 90.0)
 			(effects (font (size 1.27 1.27)))
 		)
 		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
@@ -333,14 +333,18 @@
 			)
 		)
 	)
-	(wire (pts (xy 115.570 69.850) (xy 115.570 85.090)) (stroke (width 0) (type default)) (uuid "da257d5a-5f3c-49e8-b1cc-d2962f280f18"))
-	(wire (pts (xy 115.570 85.090) (xy 110.490 85.090)) (stroke (width 0) (type default)) (uuid "da392951-04d3-4269-8443-bb2bb089bfbd"))
-	(wire (pts (xy 62.230 80.010) (xy 62.230 64.770)) (stroke (width 0) (type default)) (uuid "e1ed5a17-de2e-451f-b3aa-037a0b49110f"))
-	(wire (pts (xy 62.230 64.770) (xy 144.780 64.770)) (stroke (width 0) (type default)) (uuid "4c9fc250-44bc-455e-8bae-f91e1860f149"))
-	(wire (pts (xy 144.780 64.770) (xy 144.780 69.850)) (stroke (width 0) (type default)) (uuid "6f8d886b-dd15-4197-bb3a-363ccf1e45a0"))
-	(wire (pts (xy 154.940 69.850) (xy 154.940 85.090)) (stroke (width 0) (type default)) (uuid "86edc35b-8ae2-4179-a045-430217be9c30"))
-	(wire (pts (xy 154.940 85.090) (xy 149.860 85.090)) (stroke (width 0) (type default)) (uuid "f2f84c33-c736-45e2-bded-777b52f38621"))
-	(wire (pts (xy 149.860 95.250) (xy 149.860 96.520)) (stroke (width 0) (type default)) (uuid "f035e9ed-42fc-4388-bad6-8a41a6d65a15"))
-	(wire (pts (xy 149.860 96.520) (xy 77.470 96.520)) (stroke (width 0) (type default)) (uuid "967fc83e-cefe-49fb-8d12-181099487b13"))
-	(wire (pts (xy 77.470 96.520) (xy 77.470 80.010)) (stroke (width 0) (type default)) (uuid "a04fa268-ea17-448b-8b75-d4701e1bad5d"))
+	(wire (pts (xy 62.230 80.010) (xy 62.230 69.850)) (stroke (width 0) (type default)) (uuid "95edf157-29fd-468a-a29f-9ec9e78750a5"))
+	(wire (pts (xy 62.230 69.850) (xy 105.410 69.850)) (stroke (width 0) (type default)) (uuid "36948f2b-b691-41a4-be50-e4894915216a"))
+	(wire (pts (xy 115.570 69.850) (xy 115.570 85.090)) (stroke (width 0) (type default)) (uuid "2357ee8a-a37f-45f5-abb0-d529a4758c03"))
+	(wire (pts (xy 115.570 85.090) (xy 110.490 85.090)) (stroke (width 0) (type default)) (uuid "1a062abb-80d8-4577-b7a0-af4077c26760"))
+	(wire (pts (xy 110.490 95.250) (xy 77.470 95.250)) (stroke (width 0) (type default)) (uuid "657682e5-c238-41c5-9815-788ba6bd4d5c"))
+	(wire (pts (xy 77.470 95.250) (xy 77.470 80.010)) (stroke (width 0) (type default)) (uuid "387b1694-ce2a-4585-908e-74697d5962ce"))
+	(wire (pts (xy 62.230 80.010) (xy 62.230 64.770)) (stroke (width 0) (type default)) (uuid "66b46cef-a4da-454f-8f92-ea32c15de1e9"))
+	(wire (pts (xy 62.230 64.770) (xy 144.780 64.770)) (stroke (width 0) (type default)) (uuid "81460b0c-3d54-4b6e-9a02-ea199500d9c5"))
+	(wire (pts (xy 144.780 64.770) (xy 144.780 69.850)) (stroke (width 0) (type default)) (uuid "5a4ab7b0-d411-43b3-bac3-9474f00ae607"))
+	(wire (pts (xy 154.940 69.850) (xy 154.940 85.090)) (stroke (width 0) (type default)) (uuid "55369488-28e9-4dfc-a7c8-794b4b012d4a"))
+	(wire (pts (xy 154.940 85.090) (xy 149.860 85.090)) (stroke (width 0) (type default)) (uuid "cf1db9a3-1220-4c2a-9c01-c3572bc74ac9"))
+	(wire (pts (xy 149.860 95.250) (xy 149.860 96.520)) (stroke (width 0) (type default)) (uuid "92afcba1-6c28-4682-ba8d-df1800a48421"))
+	(wire (pts (xy 149.860 96.520) (xy 77.470 96.520)) (stroke (width 0) (type default)) (uuid "17ee064c-712c-4181-b4a8-9a3bdd0983ef"))
+	(wire (pts (xy 77.470 96.520) (xy 77.470 80.010)) (stroke (width 0) (type default)) (uuid "473cee8d-0415-4e96-aaff-e33db8100bb3"))
 )
