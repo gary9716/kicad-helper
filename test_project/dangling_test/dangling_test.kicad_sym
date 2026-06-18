@@ -1,18 +1,18 @@
 (kicad_symbol_lib
 	(version 20200827)
 	(generator "kicad_symbol_editor")
-	(symbol "R"
+	(symbol "MY_RESISTOR"
 		(pin_names
 			(offset 1.016)
 		)
 		(in_bom yes)
 		(on_board yes)
 		(property "Reference" "R"
-			(at -2.54 -5.08 0)
+			(at -5.08 -5.08 0)
 			(effects (font (size 1.27 1.27)) (justify left))
 		)
-		(property "Value" "R"
-			(at -2.54 5.08 0)
+		(property "Value" "MY_RESISTOR"
+			(at -5.08 5.08 0)
 			(effects (font (size 1.27 1.27)) (justify left))
 		)
 		(property "Footprint" ""
@@ -29,17 +29,17 @@
 				(hide yes)
 			)
 		)
-		(symbol "R_0_1"
+		(symbol "MY_RESISTOR_0_1"
 			(rectangle
-				(start -2.54 -2.54)
-				(end 2.54 2.54)
+				(start -5.08 -2.54)
+				(end 5.08 2.54)
 				(stroke (width 0.254) (type default))
 				(fill (type background))
 			)
 		)
-		(symbol "R_1_1"
+		(symbol "MY_RESISTOR_1_1"
 			(pin passive line
-				(at -5.08 0.00 0)
+				(at -7.62 0.00 0)
 				(length 2.54)
 				(name "1"
 					(effects (font (size 1.27 1.27)))
@@ -48,8 +48,8 @@
 					(effects (font (size 1.27 1.27)))
 				)
 			)
-			(pin passive line
-				(at 5.08 0.00 180)
+			(pin output line
+				(at 7.62 0.00 180)
 				(length 2.54)
 				(name "2"
 					(effects (font (size 1.27 1.27)))
@@ -60,77 +60,18 @@
 			)
 		)
 	)
-	(symbol "C"
+	(symbol "MY_CAPACITOR"
 		(pin_names
 			(offset 1.016)
 		)
 		(in_bom yes)
 		(on_board yes)
 		(property "Reference" "C"
-			(at -2.54 -5.08 0)
+			(at -5.08 -5.08 0)
 			(effects (font (size 1.27 1.27)) (justify left))
 		)
-		(property "Value" "C"
-			(at -2.54 5.08 0)
-			(effects (font (size 1.27 1.27)) (justify left))
-		)
-		(property "Footprint" ""
-			(at 0 0 0)
-			(effects
-				(font (size 1.27 1.27))
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 0 0 0)
-			(effects
-				(font (size 1.27 1.27))
-				(hide yes)
-			)
-		)
-		(symbol "C_0_1"
-			(rectangle
-				(start -2.54 -2.54)
-				(end 2.54 2.54)
-				(stroke (width 0.254) (type default))
-				(fill (type background))
-			)
-		)
-		(symbol "C_1_1"
-			(pin passive line
-				(at -5.08 0.00 0)
-				(length 2.54)
-				(name "1"
-					(effects (font (size 1.27 1.27)))
-				)
-				(number "1"
-					(effects (font (size 1.27 1.27)))
-				)
-			)
-			(pin passive line
-				(at 5.08 0.00 180)
-				(length 2.54)
-				(name "2"
-					(effects (font (size 1.27 1.27)))
-				)
-				(number "2"
-					(effects (font (size 1.27 1.27)))
-				)
-			)
-		)
-	)
-	(symbol "KEYSTONE_2466"
-		(pin_names
-			(offset 1.016)
-		)
-		(in_bom yes)
-		(on_board yes)
-		(property "Reference" "BT"
-			(at -5.08 -7.62 0)
-			(effects (font (size 1.27 1.27)) (justify left))
-		)
-		(property "Value" "KEYSTONE_2466"
-			(at -5.08 7.62 0)
+		(property "Value" "MY_CAPACITOR"
+			(at -5.08 5.08 0)
 			(effects (font (size 1.27 1.27)) (justify left))
 		)
 		(property "Footprint" ""
@@ -147,19 +88,19 @@
 				(hide yes)
 			)
 		)
-		(symbol "KEYSTONE_2466_0_1"
+		(symbol "MY_CAPACITOR_0_1"
 			(rectangle
-				(start -5.08 -5.08)
-				(end 5.08 5.08)
+				(start -5.08 -2.54)
+				(end 5.08 2.54)
 				(stroke (width 0.254) (type default))
 				(fill (type background))
 			)
 		)
-		(symbol "KEYSTONE_2466_1_1"
-			(pin power_out line
+		(symbol "MY_CAPACITOR_1_1"
+			(pin input line
 				(at -7.62 0.00 0)
 				(length 2.54)
-				(name "VCC"
+				(name "1"
 					(effects (font (size 1.27 1.27)))
 				)
 				(number "1"
@@ -169,7 +110,7 @@
 			(pin passive line
 				(at 7.62 0.00 180)
 				(length 2.54)
-				(name "GND"
+				(name "2"
 					(effects (font (size 1.27 1.27)))
 				)
 				(number "2"

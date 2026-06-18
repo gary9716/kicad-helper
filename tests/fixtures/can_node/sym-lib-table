@@ -1,0 +1,9 @@
+(sym_lib_table
+	(lib
+		(name "mcp_test")
+		(type KiCad)
+		(uri "${KIPRJMOD}/mcp_test.kicad_sym")
+		(options "")
+		(descr "")
+	)
+)

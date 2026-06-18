@@ -1,0 +1,9 @@
+(sym_lib_table
+	(lib
+		(name "dangling_test")
+		(type KiCad)
+		(uri "${KIPRJMOD}/dangling_test.kicad_sym")
+		(options "")
+		(descr "")
+	)
+)

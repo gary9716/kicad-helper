@@ -232,7 +232,7 @@ def get_instance_aabb(local_bbox, tx, ty, angle, mirror_x=False, mirror_y=False)
     return global_bbox
 
 
-def find_orthogonal_path(start, end, obstacles, start_dir=None, grid_size=1.27, blocked_pins=None, blocked_wires=None):
+def find_orthogonal_path(start, end, obstacles, start_dir=None, grid_size=1.27, blocked_pins=None, blocked_wires=None, required_end_dir=None):
     # start: (x1, y1)
     # end: (x2, y2)
     # obstacles: list of BoundingBox objects
@@ -315,8 +315,10 @@ def find_orthogonal_path(start, end, obstacles, start_dir=None, grid_size=1.27, 
         f, g, dir_in, curr = heapq.heappop(pq)
         
         if curr == end_grid:
-            found_path = (curr, dir_in)
-            break
+            if required_end_dir is None or dir_in == required_end_dir:
+                found_path = (curr, dir_in)
+                break
+            continue
             
         state = (curr, dir_in)
         if g_score.get(state, float('inf')) < g:
@@ -836,10 +838,43 @@ def add_symbol_def_to_schematic(sch_sexpr, symbol_def):
     lib_syms.append(symbol_def)
 
 
-def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin=2.54, resolve=True):
+def _add_instance_metadata(inst, defn, root_uuid, project_name, reference):
+    """Append the per-pin uuid entries and the `instances` block KiCad needs to
+    register a symbol on the root sheet's instance path.
+
+    Without this block the symbol's pins are not part of the sheet connection
+    graph, so a plain wire to a pin is reported `wire_dangling` by ERC even though
+    the pin is geometrically on the wire. (A net label sidesteps it by carrying
+    its own net name — which is why label-routing worked around the missing block.)
+    """
+    if defn:
+        seen = set()
+        for p in get_all_pins_from_symbol_def(defn):
+            num = p.get('number')
+            if num and num not in seen:
+                seen.add(num)
+                inst.append(['pin', num, ['uuid', str(uuid.uuid4())]])
+    inst.append([
+        'instances',
+        ['project', project_name,
+            ['path', f'/{root_uuid}',
+                ['reference', reference],
+                ['unit', '1'],
+            ],
+        ],
+    ])
+
+
+def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin=2.54, resolve=True,
+                              bbox_overrides=None):
     """
     Places new symbols in the schematic, parses all symbols' bounds, resolves overlaps, and writes back.
-    
+
+    bbox_overrides: optional {reference: BoundingBox} of local bounding boxes to use
+    for overlap resolution instead of the symbol's own body box. Callers pass boxes
+    padded for net-label text so symbols are spread far enough apart that labels do
+    not collide. Symbol positions still snap to grid.
+
     new_placements: list of dicts:
     [
         {
@@ -863,7 +898,15 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
     
     if not sch_sexpr or sch_sexpr[0] != 'kicad_sch':
         raise ValueError(f"Invalid KiCad schematic file {schematic_path}")
-        
+
+    # Root sheet uuid + project name drive each symbol's instances/path block.
+    root_uuid = next((c[1] for c in sch_sexpr[1:]
+                      if isinstance(c, list) and c and c[0] == 'uuid'), None)
+    if root_uuid is None:
+        root_uuid = str(uuid.uuid4())
+        sch_sexpr.insert(1, ['uuid', root_uuid])
+    project_name = os.path.splitext(os.path.basename(schematic_path))[0]
+
     # Remove existing instances of the symbols we are placing to avoid duplicates
     new_refs = {p['reference'] for p in new_placements}
     filtered_children = []
@@ -933,6 +976,7 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
             local_bbox=local_bbox,
             symbol_def=defn
         )
+        _add_instance_metadata(inst, defn, root_uuid, project_name, placement['reference'])
         sch_sexpr.append(inst)
         new_instances.append(inst)
         
@@ -972,8 +1016,10 @@ def place_symbols_and_resolve(schematic_path, table_path, new_placements, margin
                             local_definitions[lib_id_node] = defn
                             
                 local_bbox = get_symbol_local_bbox(defn) if defn else BoundingBox(-5.08, -5.08, 5.08, 5.08)
+                if bbox_overrides and ref_val in bbox_overrides:
+                    local_bbox = bbox_overrides[ref_val]
                 tx, ty, angle, mirror_x, mirror_y = get_symbol_instance_transform(child)
-                
+
                 # Check if this instance is one of the newly added ones
                 is_new = child in new_instances
                 
@@ -1053,7 +1099,13 @@ def find_pin_local_data(symbol_def, pin_ref):
 def transform_pin_coordinate(px, py, tx, ty, angle, mirror_x=False, mirror_y=False):
     """
     Transforms local pin coordinates to global schematic coordinates.
+
+    Symbol-library pin coordinates use a Y-up convention; the schematic canvas is
+    Y-down. KiCad applies this inherent vertical flip when instantiating a symbol,
+    so we negate py before mirror/rotation. Without it, every pin lands mirrored
+    about the symbol's origin and KiCad ERC reports the pins/labels unconnected.
     """
+    py = -py
     if mirror_x:
         px = -px
     if mirror_y:
@@ -1077,6 +1129,37 @@ def make_wire_sexpr(x1, y1, x2, y2):
         ["stroke", ["width", "0"], ["type", "default"]],
         ["uuid", uid]
     ]
+
+
+def _wire_grid_endpoints(wire_node, grid=1.27):
+    """Return a frozenset of the wire's two grid-snapped endpoints, or None."""
+    pts = next((s for s in wire_node[1:] if isinstance(s, list) and s[0] == 'pts'), None)
+    if not pts:
+        return None
+    cs = [(float(a[1]), float(a[2])) for a in pts[1:]
+          if isinstance(a, list) and len(a) > 2 and a[0] == 'xy']
+    if len(cs) < 2:
+        return None
+    a = (int(round(cs[0][0] / grid)), int(round(cs[0][1] / grid)))
+    b = (int(round(cs[-1][0] / grid)), int(round(cs[-1][1] / grid)))
+    return frozenset((a, b))
+
+
+def dedupe_wire_children(children):
+    """Drop wire nodes whose (unordered, grid-snapped) endpoints duplicate an earlier wire.
+    Identical overlapping segments are always redundant; keep the first, drop the rest.
+    Operates on a list of child nodes (no root tag)."""
+    seen = set()
+    out = []
+    for ch in children:
+        if isinstance(ch, list) and ch and ch[0] == 'wire':
+            ep = _wire_grid_endpoints(ch)
+            if ep is not None:
+                if ep in seen:
+                    continue
+                seen.add(ep)
+        out.append(ch)
+    return out
 
 
 def get_wire_grid_points(x1, y1, x2, y2, grid_size=1.27):
@@ -1240,64 +1323,8 @@ def connect_symbols_in_schematic(schematic_path, table_path, connections, orthog
         gx1, gy1 = transform_pin_coordinate(pin1_data[0], pin1_data[1], tx1, ty1, angle1, mirror_x1, mirror_y1)
         gx2, gy2 = transform_pin_coordinate(pin2_data[0], pin2_data[1], tx2, ty2, angle2, mirror_x2, mirror_y2)
         
-        # Remove all connected wire segments from the terminals of this connection in sch_sexpr
-        snap_gx1 = round(gx1 / 1.27) * 1.27
-        snap_gy1 = round(gy1 / 1.27) * 1.27
-        snap_gx2 = round(gx2 / 1.27) * 1.27
-        snap_gy2 = round(gy2 / 1.27) * 1.27
-        terminals = {(snap_gx1, snap_gy1), (snap_gx2, snap_gy2)}
-        
-        # Build adjacency map of existing wires
-        wire_elements = []
-        for child in sch_sexpr[1:]:
-            if isinstance(child, list) and child[0] == 'wire':
-                pts_node = None
-                for sub in child[1:]:
-                    if isinstance(sub, list) and sub[0] == 'pts':
-                        pts_node = sub
-                        break
-                if pts_node:
-                    x1_val, y1_val = None, None
-                    x2_val, y2_val = None, None
-                    for xy in pts_node[1:]:
-                        if isinstance(xy, list) and len(xy) > 2 and xy[0] == 'xy':
-                            if x1_val is None:
-                                x1_val = round(float(xy[1]) / 1.27) * 1.27
-                                y1_val = round(float(xy[2]) / 1.27) * 1.27
-                            else:
-                                x2_val = round(float(xy[1]) / 1.27) * 1.27
-                                y2_val = round(float(xy[2]) / 1.27) * 1.27
-                    if x1_val is not None and x2_val is not None:
-                        wire_elements.append((child, (x1_val, y1_val), (x2_val, y2_val)))
-                        
+        # Do not delete existing wires to avoid destroying multi-point nets (VCC, GND, reset pull-ups, etc.)
         to_delete = set()
-        queue = list(terminals)
-        visited_pts = set(terminals)
-        
-        while queue:
-            curr = queue.pop(0)
-            for wire, p1, p2 in wire_elements:
-                if id(wire) in to_delete:
-                    continue
-                # If wire touches curr
-                if (abs(p1[0] - curr[0]) < 0.05 and abs(p1[1] - curr[1]) < 0.05):
-                    to_delete.add(id(wire))
-                    if p2 not in visited_pts:
-                        visited_pts.add(p2)
-                        queue.append(p2)
-                elif (abs(p2[0] - curr[0]) < 0.05 and abs(p2[1] - curr[1]) < 0.05):
-                    to_delete.add(id(wire))
-                    if p1 not in visited_pts:
-                        visited_pts.add(p1)
-                        queue.append(p1)
-                        
-        # Filter out deleted wires
-        filtered_children = []
-        for child in sch_sexpr[1:]:
-            if isinstance(child, list) and child[0] == 'wire' and id(child) in to_delete:
-                continue
-            filtered_children.append(child)
-        sch_sexpr = [sch_sexpr[0]] + filtered_children
         
         # Generate wire S-expression(s)
         orientation1 = (pin1_data[2] + angle1) % 360  # Global orientation of source pin
@@ -1316,48 +1343,58 @@ def connect_symbols_in_schematic(schematic_path, table_path, connections, orthog
                 
             blocked_pin_grids.add((gpx, gpy))
 
-        # Rebuild blocked_wire_directions from all remaining wires in sch_sexpr
-        blocked_wire_directions = {}
+        # Collect existing wire segments (grid coords) and build a net model so we can
+        # tell which wires already belong to the net being connected.
+        existing_segs = []
         for child in sch_sexpr[1:]:
             if isinstance(child, list) and child[0] == 'wire':
-                pts_node = None
-                for sub in child[1:]:
-                    if isinstance(sub, list) and sub[0] == 'pts':
-                        pts_node = sub
-                        break
-                if pts_node:
-                    x1_val, y1_val = None, None
-                    x2_val, y2_val = None, None
-                    for xy in pts_node[1:]:
-                        if isinstance(xy, list) and len(xy) > 2 and xy[0] == 'xy':
-                            if x1_val is None:
-                                x1_val = float(xy[1])
-                                y1_val = float(xy[2])
-                            else:
-                                x2_val = float(xy[1])
-                                y2_val = float(xy[2])
-                    if x1_val is not None and x2_val is not None:
-                        # Convert to grid
-                        wgx1 = int(round(x1_val / 1.27))
-                        wgy1 = int(round(y1_val / 1.27))
-                        wgx2 = int(round(x2_val / 1.27))
-                        wgy2 = int(round(y2_val / 1.27))
-                        
-                        if wgx1 == wgx2:
-                            # Vertical wire
-                            dirs = {(0, 1), (0, -1)}
-                            for gy in range(min(wgy1, wgy2), max(wgy1, wgy2) + 1):
-                                blocked_wire_directions.setdefault((wgx1, gy), set()).update(dirs)
-                        elif wgy1 == wgy2:
-                            # Horizontal wire
-                            dirs = {(1, 0), (-1, 0)}
-                            for gx in range(min(wgx1, wgx2), max(wgx1, wgx2) + 1):
-                                blocked_wire_directions.setdefault((gx, wgy1), set()).update(dirs)
-                        else:
-                            # Diagonal/other wire: block all directions
-                            dirs = {(1, 0), (-1, 0), (0, 1), (0, -1)}
-                            blocked_wire_directions.setdefault((wgx1, wgy1), set()).update(dirs)
-                            blocked_wire_directions.setdefault((wgx2, wgy2), set()).update(dirs)
+                pts_node = next((sub for sub in child[1:] if isinstance(sub, list) and sub[0] == 'pts'), None)
+                if not pts_node:
+                    continue
+                cs = [(float(a[1]), float(a[2])) for a in pts_node[1:]
+                      if isinstance(a, list) and len(a) > 2 and a[0] == 'xy']
+                if len(cs) >= 2:
+                    existing_segs.append(((int(round(cs[0][0] / 1.27)), int(round(cs[0][1] / 1.27))),
+                                          (int(round(cs[-1][0] / 1.27)), int(round(cs[-1][1] / 1.27)))))
+
+        _net = {}
+        def _net_find(n):
+            _net.setdefault(n, n)
+            while _net[n] != n:
+                _net[n] = _net[_net[n]]
+                n = _net[n]
+            return n
+        for g1, g2 in existing_segs:
+            _net[_net_find(g1)] = _net_find(g2)
+        start_g = (int(round(gx1 / 1.27)), int(round(gy1 / 1.27)))
+        end_g = (int(round(gx2 / 1.27)), int(round(gy2 / 1.27)))
+        current_net_roots = {_net_find(start_g), _net_find(end_g)}
+
+        # Build blocked_wire_directions to forbid collinear overlap — but ONLY for wires
+        # NOT on the net we're connecting. Joining your own net is legal; overlapping a
+        # different net is an electrical short. Net-aware blocking lets the full A* succeed
+        # for multi-pin nets instead of falling through to overlap-blind fallbacks.
+        blocked_wire_directions = {}
+        for (wg1, wg2) in existing_segs:
+            if _net_find(wg1) in current_net_roots or _net_find(wg2) in current_net_roots:
+                continue
+            wgx1, wgy1 = wg1
+            wgx2, wgy2 = wg2
+            if wgx1 == wgx2:
+                # Vertical wire
+                dirs = {(0, 1), (0, -1)}
+                for gy in range(min(wgy1, wgy2), max(wgy1, wgy2) + 1):
+                    blocked_wire_directions.setdefault((wgx1, gy), set()).update(dirs)
+            elif wgy1 == wgy2:
+                # Horizontal wire
+                dirs = {(1, 0), (-1, 0)}
+                for gx in range(min(wgx1, wgx2), max(wgx1, wgx2) + 1):
+                    blocked_wire_directions.setdefault((gx, wgy1), set()).update(dirs)
+            else:
+                # Diagonal/other wire: block all directions
+                dirs = {(1, 0), (-1, 0), (0, 1), (0, -1)}
+                blocked_wire_directions.setdefault((wgx1, wgy1), set()).update(dirs)
+                blocked_wire_directions.setdefault((wgx2, wgy2), set()).update(dirs)
 
         # Ensure start and end pins of current connection are not blocked
         start_grid = (int(round(gx1 / 1.27)), int(round(gy1 / 1.27)))
@@ -1386,13 +1423,16 @@ def connect_symbols_in_schematic(schematic_path, table_path, connections, orthog
             )
             
             if not path or len(path) <= 1:
-                # Fallback 1: Try routing with only pin blocking (allowing wire overlap if necessary)
+                # Fallback: relax only the forced start direction. KEEP pin blocking AND
+                # net-aware wire blocking — routing through another pin or over a different
+                # net are both electrical shorts, so those constraints must never be dropped.
                 path = find_orthogonal_path(
-                    (gx1, gy1), (gx2, gy2), symbol_boxes, 
-                    start_dir=start_dir, grid_size=1.27, 
-                    blocked_pins=blocked_pin_grids
+                    (gx1, gy1), (gx2, gy2), symbol_boxes,
+                    grid_size=1.27,
+                    blocked_pins=blocked_pin_grids,
+                    blocked_wires=blocked_wire_directions
                 )
-            
+
             if path and len(path) > 1:
                 for i in range(len(path) - 1):
                     p1 = path[i]
@@ -1431,9 +1471,12 @@ def connect_symbols_in_schematic(schematic_path, table_path, connections, orthog
             new_wires.append(w)
             sch_sexpr.append(w)
             
+    # Drop any exact-duplicate wire segments produced while routing multi-pin nets.
+    sch_sexpr = [sch_sexpr[0]] + dedupe_wire_children(sch_sexpr[1:])
+
     # Save schematic
     with open(schematic_path, 'w', encoding='utf-8') as f:
         f.write(format_sexpr(sch_sexpr))
-        
+
     return len(new_wires)
 

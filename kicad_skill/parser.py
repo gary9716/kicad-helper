@@ -97,13 +97,25 @@ def format_sexpr(node, indent_level=0, parent_tag=None, is_tag=False, child_idx=
                 return '""'
             
             # Check if this string must be quoted based on parent tag and index
-            QUOTED_VAL_TAGS = {'property', 'name', 'number', 'symbol', 'uuid', 'generator', 'generator_version'}
+            QUOTED_VAL_TAGS = {'property', 'name', 'number', 'symbol', 'uuid', 'generator', 'generator_version', 'lib_id'}
+            VALID_PIN_TYPES = {
+                'input', 'output', 'bidirectional', 'tri_state', 'passive',
+                'free', 'unspecified', 'power_in', 'power_out', 'open_collector',
+                'open_emitter', 'no_connect'
+            }
             should_quote = False
             if not is_tag:
                 if parent_tag in QUOTED_VAL_TAGS:
                     should_quote = True
                 elif parent_tag == 'paper' and child_idx == 1:
                     should_quote = True
+                elif parent_tag in ('path', 'page') and child_idx == 1:
+                    should_quote = True
+                elif parent_tag == 'pin' and child_idx == 1:
+                    # If it's a pin electrical type keyword under symbol pin, do not quote.
+                    # Otherwise (sheet pin name), quote it.
+                    if node not in VALID_PIN_TYPES:
+                        should_quote = True
                 
             # Check if it needs quotes
             # KiCad unquoted strings must only contain certain characters

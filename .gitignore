@@ -11,3 +11,8 @@ test_project/freerouting.jar
 test_project/test.kicad_prl
 test_project/test.kicad_pro
 .venv/
+
+# Generated module-creation demo output (run tools/verify_module_creation.py)
+test_project/can_node_module/
+# Test temp schematics written into the fixture dir during a run
+tests/fixtures/can_node/_*.kicad_sch

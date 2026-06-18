@@ -12,7 +12,11 @@ A Python library and CLI helper tool to automate symbol generation, collision-fr
    Routes wires orthogonally, snapping precisely to the standard 1.27 mm grid. It automatically bypasses component bodies, avoids routing directly over other terminals, and prevents collinear wire-on-wire overlaps while allowing perpendicular crossings.
 4. **Collision-free Field Placements**: 
    Automatically detects if Reference (`Reference`) and Value (`Value`) text fields collide with pin names, numbers, connection terminals, or wires (especially when the component is rotated at 90°, 180°, or 270°) and shifts them to collision-free positions.
-5. **Interactive Demos & Integrations**:
+5. **Hierarchical Module Extraction**:
+   Groups a set of components into a sub-sheet (`create_module_from_components`). Intra-module connectivity is rebuilt purely with labels — local labels for fully-internal nets, hierarchical labels for boundary nets — so the sub-sheet has **no net-crossing wires** and the boundary nets collapse to clean parent sheet pins. Connectivity is gated on KiCad's own hierarchical ERC (run on the parent root, which traverses the sub-sheet).
+6. **Collision-free Net Labels**:
+   Every net label is oriented away from its symbol and AABB-pushed clear of symbol bodies (including pins, pin numbers/names), reference/value text, wires, and other labels. Top/bottom pins use an L-stub fan-out (staggered riser + horizontal run) so labels read horizontally instead of forming a vertical comb. A final reconciliation pass settles any residual overlap.
+7. **Interactive Demos & Integrations**:
    Features schematic canvas clearing before running layout procedures.
 
 ---
@@ -25,13 +29,20 @@ A Python library and CLI helper tool to automate symbol generation, collision-fr
 │   ├── parser.py           # KiCad S-expression parser & formatter
 │   ├── symbol.py           # Symbol library generation & dimensions
 │   ├── schematic.py        # Symbol placement, overlap resolution, & A* routing
+│   ├── regenerate.py       # Rebuild a clean flat schematic from a ground-truth netlist
+│   ├── module.py           # Group components into a hierarchical sub-sheet (label-based)
+│   ├── erc.py              # KiCad-cli ERC wrapper (the authoritative connectivity gate)
+│   ├── netlist_eval.py     # Hand-rolled netlist extraction & ground-truth comparison
+│   ├── evaluate_layout.py  # Layout self-check (shorts / dangling / duplicate wires)
 │   └── main.py             # CLI parser mapping commands to package routines
-├── test_project/           # Local demo and playground
+├── tests/                  # Unittest suite
+│   └── fixtures/can_node/  # Committed fixture: CAN-node ground truth + symbols + table
+├── tools/
+│   └── verify_module_creation.py  # End-to-end module-creation + hierarchical-ERC demo
+├── test_project/           # Local demo and playground (KiCad projects, GUI-openable)
 │   ├── run_demo.py         # Python-based end-to-end placement & routing demo
-│   ├── run_cli_demo.sh     # Shell script showcasing equivalent CLI usage
-│   ├── run_flashlight_demo.py  # Python-based flashlight schematic layout demo
-│   ├── run_flashlight_e2e.py   # Python-based flashlight end-to-end schematic + PCB autorouting pipeline
-│   └── test_project.kicad_sch  # Target test schematic file
+│   ├── run_flashlight_e2e.py   # Flashlight end-to-end schematic + PCB autorouting pipeline
+│   └── can_node_module/    # Generated module-creation demo output (gitignored)
 ├── run_integration_test.py # Integration test script
 └── README.md               # This documentation
 ```
@@ -70,25 +81,33 @@ This script automates:
 7. Executing a PCB Design Rules Check (DRC) to verify there are 0 violations and 0 unconnected pins.
 8. Exporting the Bill of Materials (BOM) and running a DFM compliance audit.
 
-### 3. CLI Demo Script
+### 3. Module Creation Demo (hierarchical sub-sheet)
+The canonical end-to-end check for component grouping and label-based wiring. It builds the CAN-node design, regenerates a clean flat schematic, extracts a subset into a sub-sheet, and gates on KiCad's **parent** hierarchical ERC:
+```bash
+cd /Users/gary/kicad-helper && python3 tools/verify_module_creation.py            # default MCP+TJA subset
+cd /Users/gary/kicad-helper && python3 tools/verify_module_creation.py U2 Y1 C1 C2  # custom subset
+```
+A `[PASS] PARENT hierarchical ERC: 0` means the parent root and the sub-sheet (traversed via its sheet path) are both clean. Rendered `parent.pdf` / `sub.pdf` and the schematics are written to `test_project/can_node_module/`. Note: ERC on the sub-sheet file **standalone** is a false gate — its hierarchical labels have no parent when opened alone — so always gate on the parent.
+
+### 4. CLI Demo Script
 To see how the command-line helper works under the hood, run:
 ```bash
 ./test_project/run_cli_demo.sh
 ```
 
-### 4. Integration Tests
+### 5. Integration Tests
 To run integration tests against the communication schematic structure:
 ```bash
 uv run run_integration_test.py
 ```
 
-### 5. Unit Tests
+### 6. Unit Tests
 To run the mathematical layout, geometry bounding box, and A* grid routing unit tests:
 ```bash
 uv run python -m unittest discover -s tests
 ```
 
-### 6. CI/CD Pipeline
+### 7. CI/CD Pipeline
 A GitHub Actions workflow is configured in [.github/workflows/ci.yml](file:///Users/gary/kicad-helper/.github/workflows/ci.yml). It automatically runs the full suite of unit and integration tests across Python versions 3.10, 3.11, and 3.12 on every push and pull request to the `main` branch.
 
 ---

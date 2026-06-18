@@ -15,7 +15,7 @@ def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, height=None, 
     VALID_PIN_TYPES = {
         "input", "output", "bidirectional", "tri_state", "passive",
         "free", "unspecified", "power_in", "power_out", 
-        "open_collector", "open_emitter"
+        "open_collector", "open_emitter", "no_connect"
     }
     
     for p in pins:
