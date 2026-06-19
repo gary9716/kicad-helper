@@ -48,6 +48,7 @@ def evaluate_schematic_layout(sch_path, table_path):
     junctions = []
     labels = []
     sheets = []
+    no_connects = []
     
     for child in sch_sexpr[1:]:
         if not isinstance(child, list) or not child:
@@ -63,6 +64,8 @@ def evaluate_schematic_layout(sch_path, table_path):
             labels.append(child)
         elif tag == 'sheet':
             sheets.append(child)
+        elif tag == 'no_connect':
+            no_connects.append(child)
 
     issues = []
     deductions = 0
@@ -245,10 +248,29 @@ def evaluate_schematic_layout(sch_path, table_path):
         if at_node:
             label_pts.append((float(at_node[1]), float(at_node[2])))
 
+    # no_connect positions: pins here are intentionally unconnected — suppress DISCONNECT
+    no_connect_pts = []
+    for nc in no_connects:
+        at_node = next((sub for sub in nc[1:] if isinstance(sub, list) and sub[0] == 'at'), None)
+        if at_node:
+            no_connect_pts.append((float(at_node[1]), float(at_node[2])))
+
+    # Power symbol pins: placed at the symbol's (at x y) position (pin length=0 at origin)
+    for sym in symbols:
+        lib_id_val = next((sub[1] for sub in sym[1:] if isinstance(sub, list) and sub[0] == 'lib_id' and len(sub) > 1), None)
+        if lib_id_val and lib_id_val.startswith('power:'):
+            at_node = next((sub for sub in sym[1:] if isinstance(sub, list) and sub[0] == 'at' and len(sub) > 2), None)
+            if at_node:
+                label_pts.append((float(at_node[1]), float(at_node[2])))
+
     unconnected_pins_count = 0
     for p in pins:
         px, py = p['x'], p['y']
         connected = False
+
+        # Explicitly marked no_connect — not a real disconnect
+        if any(abs(nx - px) < 0.05 and abs(ny - py) < 0.05 for nx, ny in no_connect_pts):
+            continue
 
         # Check labels coincident with the pin
         for lx, ly in label_pts:
@@ -277,6 +299,13 @@ def evaluate_schematic_layout(sch_path, table_path):
                     break
                     
         if not connected:
+            # Near-miss: wire end within 0.1–4mm of pin → likely coord offset bug
+            near = min(
+                (((wx - px)**2 + (wy - py)**2)**0.5, wx, wy)
+                for wx, wy in all_wire_ends
+            ) if all_wire_ends else None
+            if near and 0.1 < near[0] < 4.0:
+                issues.append(f"[WARN:NEAR-MISS] Wire end at ({near[1]:.3f},{near[2]:.3f}) is {near[0]:.2f}mm from pin {p['number']} ({p['name']}) of {p['ref']} at ({p['x']:.3f},{p['y']:.3f}) — check y-axis or rotation")
             unconnected_pins_count += 1
             issues.append(f"[DISCONNECT] Pin {p['number']} ({p['name']}) of {p['ref']} at ({p['x']:.3f}, {p['y']:.3f}) is unconnected")
 
@@ -464,6 +493,94 @@ def evaluate_schematic_layout(sch_path, table_path):
     if duplicate_wires > 0:
         deductions += min(duplicate_wires * 5, 20)
 
+    # --- CHECK 9: Polarized Capacitor Polarity ---
+    # Build a second union-find (separate from the short-check one) that includes label
+    # positions so we can trace which net name reaches each pin.
+    import re as _re
+
+    def _net_parse_voltage(name):
+        if name in ('GND', 'GNDA', 'GNDPWR', 'GNDD', '0V'):
+            return 0.0
+        # "3.3V" / "+3.3V" / "-12.5V"
+        m = _re.match(r'^([+-])?(\d+)\.(\d+)[Vv]$', name)
+        if m:
+            sign = -1.0 if m.group(1) == '-' else 1.0
+            return sign * float(f"{m.group(2)}.{m.group(3)}")
+        # "+3V3" / "5V" / "-12V"
+        m = _re.match(r'^([+-])?(\d+)[Vv](\d+)?$', name)
+        if m:
+            sign = -1.0 if m.group(1) == '-' else 1.0
+            frac = int(m.group(3)) / (10 ** len(m.group(3))) if m.group(3) else 0.0
+            return sign * (int(m.group(2)) + frac)
+        return None
+
+    _nuf = {}
+    def _nfind(n):
+        _nuf.setdefault(n, n)
+        while _nuf[n] != n:
+            _nuf[n] = _nuf[_nuf[n]]
+            n = _nuf[n]
+        return n
+    def _nunion(a, b):
+        _nuf[_nfind(a)] = _nfind(b)
+
+    for path in wire_paths:
+        pts_gk = [gk(*pt) for pt in path]
+        for i in range(len(pts_gk) - 1):
+            _nunion(pts_gk[i], pts_gk[i + 1])
+
+    _net_names = {}  # root gk → net name
+    for _l in labels:
+        _lname = _l[1] if len(_l) > 1 and isinstance(_l[1], str) else None
+        if not _lname:
+            continue
+        _at = next((s for s in _l[1:] if isinstance(s, list) and s[0] == 'at'), None)
+        if _at:
+            _net_names.setdefault(_nfind(gk(float(_at[1]), float(_at[2]))), _lname)
+    for _sym in symbols:
+        _lid = next((s[1] for s in _sym[1:] if isinstance(s, list) and s[0] == 'lib_id' and len(s) > 1), '')
+        if not _lid.startswith('power:'):
+            continue
+        _at = next((s for s in _sym[1:] if isinstance(s, list) and s[0] == 'at' and len(s) > 2), None)
+        if _at:
+            _net_names.setdefault(_nfind(gk(float(_at[1]), float(_at[2]))), _lid.split(':')[1])
+
+    def _pin_net_name(px, py):
+        return _net_names.get(_nfind(gk(px, py)))
+
+    polarity_errors = 0
+    for _inst in symbols:
+        _lid, _ref = '', ''
+        for s in _inst[1:]:
+            if isinstance(s, list) and len(s) > 1:
+                if s[0] == 'lib_id':
+                    _lid = s[1]
+                elif s[0] == 'property' and len(s) > 2 and s[1] == 'Reference':
+                    _ref = s[2]
+        _lpart = _lid.split(':')[1] if ':' in _lid else _lid
+        if 'C_Polarized' not in _lpart and 'CP_' not in _lpart:
+            continue
+        _d = local_definitions.get(_lid)
+        if not _d and ':' in _lid:
+            _ln, _sn = _lid.split(':', 1)
+            _d = find_symbol_definition(_ln, _sn, lib_map, project_dir)
+        _sp = get_symbol_pins_global(_inst, _d) if _d else []
+        _pp = next((p for p in _sp if p['name'] == '+'), None) or next((p for p in _sp if p['number'] == '1'), None)
+        _np = next((p for p in _sp if p['name'] == '-'), None) or next((p for p in _sp if p['number'] == '2'), None)
+        if not _pp or not _np:
+            continue
+        _pnet = _pin_net_name(_pp['x'], _pp['y'])
+        _nnet = _pin_net_name(_np['x'], _np['y'])
+        if not _pnet or not _nnet:
+            continue
+        _pv = _net_parse_voltage(_pnet)
+        _nv = _net_parse_voltage(_nnet)
+        if _pv is None or _nv is None:
+            continue
+        if _pv < _nv:
+            polarity_errors += 1
+            issues.append(f"[WARN:POLARITY] {_ref} ({_lpart}): + pin → '{_pnet}' ({_pv}V) < − pin → '{_nnet}' ({_nv}V) — reversed polarity")
+
     score = max(100 - deductions, 0)
 
     # Hard fail: shorts/dangling wires are correctness defects. Cap into a failing band
@@ -491,6 +608,7 @@ def evaluate_schematic_layout(sch_path, table_path):
         "duplicate_wires": duplicate_wires,
         "shorts": short_count,
         "dangling": dangling_count,
+        "polarity_errors": polarity_errors,
         "issues": issues
     }
 

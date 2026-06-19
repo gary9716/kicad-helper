@@ -3,7 +3,7 @@ import json
 import os
 import sys
 from .symbol import generate_symbol_sexpr, save_symbol_to_library
-from .schematic import place_symbols_and_resolve, connect_symbols_in_schematic
+from .schematic import place_symbols_and_resolve, connect_symbols_in_schematic, annotate_schematic
 
 def parse_pins_shorthand(shorthand_str):
     """
@@ -218,6 +218,34 @@ def handle_create_module(args):
         print(f"Error creating module: {e}", file=sys.stderr)
         sys.exit(1)
 
+def handle_annotate(args):
+    annotations = []
+    if args.annotations_json:
+        if os.path.exists(args.annotations_json):
+            with open(args.annotations_json, 'r', encoding='utf-8') as f:
+                annotations = json.load(f)
+        else:
+            annotations = json.loads(args.annotations_json)
+    else:
+        print("Error: --annotations-json is required.", file=sys.stderr)
+        sys.exit(1)
+
+    table_path = args.table
+    if not table_path:
+        table_path = os.path.join(os.path.dirname(os.path.abspath(args.schematic)), "sym-lib-table")
+
+    try:
+        n = annotate_schematic(
+            schematic_path=args.schematic,
+            table_path=table_path,
+            annotations=annotations,
+        )
+        print(f"Added {n} annotation element(s) to '{args.schematic}'.")
+    except Exception as e:
+        print(f"Error annotating schematic: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="KiCad Helper: Symbol Creator and Collision-Free Placement Tool")
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
@@ -291,6 +319,12 @@ def main():
     simp_parser.add_argument("--wl", type=float, default=0.5, help="Length weight (default: 0.5)")
     simp_parser.add_argument("--dry-run", action="store_true", help="Report plan without writing")
 
+    # annotate parser
+    ann_parser = subparsers.add_parser("annotate", help="Add global labels, power symbols, no_connects, and junctions to a schematic")
+    ann_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    ann_parser.add_argument("--annotations-json", required=True, help="JSON array of annotation objects, or path to a JSON file")
+    ann_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
+
     args = parser.parse_args()
     
     if args.command == "create-symbol":
@@ -309,6 +343,8 @@ def main():
         handle_create_module(args)
     elif args.command == "simplify-wires":
         handle_simplify_wires(args)
+    elif args.command == 'annotate':
+        handle_annotate(args)
     else:
         parser.print_help()
 

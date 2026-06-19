@@ -83,24 +83,43 @@ def find_symbol_definition(lib_name, sym_name, lib_map, project_dir):
     """
     Finds the S-expression list definition of a symbol by checking the local table and global paths.
     """
+    import copy
     # 1. Search in local libraries
     lib_path = lib_map.get(lib_name)
+    defn = None
     if lib_path:
         if not os.path.isabs(lib_path):
             lib_path = os.path.abspath(os.path.join(project_dir, lib_path))
         if os.path.exists(lib_path):
             defn = parse_symbol_from_file(lib_path, sym_name)
-            if defn:
-                return defn
                 
     # 2. Search in global KiCad installation path
-    global_path = f"/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/{lib_name}.kicad_sym"
-    if os.path.exists(global_path):
-        defn = parse_symbol_from_file(global_path, sym_name)
-        if defn:
-            return defn
+    if not defn:
+        global_path = f"/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/{lib_name}.kicad_sym"
+        if os.path.exists(global_path):
+            defn = parse_symbol_from_file(global_path, sym_name)
             
-    return None
+    if defn:
+        extends_node = next((sub for sub in defn[1:] if isinstance(sub, list) and sub[0] == 'extends'), None)
+        if extends_node:
+            base_sym_name = extends_node[1]
+            base_defn = find_symbol_definition(lib_name, base_sym_name, lib_map, project_dir)
+            if base_defn:
+                merged_defn = copy.deepcopy(defn)
+                for base_sub in base_defn[1:]:
+                    if isinstance(base_sub, list) and len(base_sub) > 0:
+                        if base_sub[0] == 'symbol':
+                            sub_copy = copy.deepcopy(base_sub)
+                            # Rename "PARENT_0_1" / "PARENT_1_1" → "CHILD_0_1" / "CHILD_1_1"
+                            # KiCad requires sub-symbol names to match the enclosing symbol name.
+                            if len(sub_copy) > 1 and isinstance(sub_copy[1], str) and sub_copy[1].startswith(base_sym_name + '_'):
+                                sub_copy[1] = sym_name + sub_copy[1][len(base_sym_name):]
+                            merged_defn.append(sub_copy)
+                        elif base_sub[0] not in ('property', 'extends', 'pin_names', 'pin_numbers'):
+                            if not any(isinstance(x, list) and x[0] == base_sub[0] for x in merged_defn[1:]):
+                                merged_defn.append(copy.deepcopy(base_sub))
+                return merged_defn
+    return defn
 
 
 def parse_symbol_from_file(file_path, sym_name):
@@ -785,13 +804,15 @@ def create_symbol_instance_sexpr(lib_id, reference, value, x, y, angle=0.0, prop
     inst.append(
         ["property", "Footprint", footprint,
             ["at", f"{x:.3f}", f"{y:.3f}", "0"],
-            ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]
+            ["hide", "yes"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
         ]
     )
     inst.append(
         ["property", "Datasheet", datasheet,
             ["at", f"{x:.3f}", f"{y:.3f}", "0"],
-            ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]
+            ["hide", "yes"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
         ]
     )
     
@@ -802,7 +823,8 @@ def create_symbol_instance_sexpr(lib_id, reference, value, x, y, angle=0.0, prop
         inst.append(
             ["property", k, v,
                 ["at", f"{x:.3f}", f"{y:.3f}", "0"],
-                ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]
+                ["hide", "yes"],
+                ["effects", ["font", ["size", "1.27", "1.27"]]]
             ]
         )
         
@@ -1479,4 +1501,287 @@ def connect_symbols_in_schematic(schematic_path, table_path, connections, orthog
         f.write(format_sexpr(sch_sexpr))
 
     return len(new_wires)
+
+
+# ── Annotation helpers ────────────────────────────────────────────────────────
+
+def make_global_label_sexpr(name, shape, x, y, angle):
+    """Create a global_label S-expression list."""
+    justify = "right" if int(angle) == 180 else "left"
+    uid = str(uuid.uuid4())
+    return [
+        "global_label", name,
+        ["shape", shape],
+        ["at", f"{x:.3f}", f"{y:.3f}", str(int(angle))],
+        ["fields_autoplaced", "yes"],
+        ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", justify]],
+        ["uuid", uid],
+        ["property", "Intersheetrefs", "",
+            ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+            ["hide", "yes"],
+            ["show_name", "no"],
+            ["do_not_autoplace", "no"],
+            ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", justify]]
+        ]
+    ]
+
+
+def make_junction_sexpr(x, y):
+    """Create a junction S-expression list."""
+    uid = str(uuid.uuid4())
+    return ["junction",
+        ["at", f"{x:.3f}", f"{y:.3f}"],
+        ["diameter", "0"],
+        ["color", "0", "0", "0", "0"],
+        ["uuid", uid]
+    ]
+
+
+def make_no_connect_sexpr(x, y):
+    """Create a no_connect S-expression list."""
+    uid = str(uuid.uuid4())
+    return ["no_connect", ["at", f"{x:.3f}", f"{y:.3f}"], ["uuid", uid]]
+
+
+def _get_sch_uuid(sch_sexpr):
+    for child in sch_sexpr[1:]:
+        if isinstance(child, list) and child[0] == 'uuid' and len(child) > 1:
+            return child[1]
+    return str(uuid.uuid4())
+
+
+def _next_pwr_ref(sch_sexpr):
+    """Return next unused #PWRNN reference designator."""
+    existing = set()
+    for child in sch_sexpr[1:]:
+        if isinstance(child, list) and child[0] == 'symbol':
+            for sub in child[1:]:
+                if isinstance(sub, list) and sub[0] == 'property' and len(sub) > 2 and sub[1] == 'Reference':
+                    ref = sub[2]
+                    if ref.startswith('#PWR'):
+                        try:
+                            existing.add(int(ref[4:]))
+                        except ValueError:
+                            pass
+    n = 1
+    while n in existing:
+        n += 1
+    return f"#PWR{n:02d}"
+
+
+def _make_power_instance(name, x, y, pwr_ref, sch_uuid, project_name):
+    """Create a power symbol instance S-expression list."""
+    lib_id = f"power:{name}"
+    uid = str(uuid.uuid4())
+    uid_pin = str(uuid.uuid4())
+    return [
+        "symbol",
+        ["lib_id", lib_id],
+        ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+        ["unit", "1"],
+        ["body_style", "1"],
+        ["exclude_from_sim", "no"],
+        ["in_bom", "yes"],
+        ["on_board", "yes"],
+        ["in_pos_files", "yes"],
+        ["dnp", "no"],
+        ["uuid", uid],
+        ["property", "Reference", pwr_ref,
+            ["at", f"{x:.3f}", f"{y+1.27:.3f}", "0"],
+            ["hide", "yes"], ["show_name", "no"], ["do_not_autoplace", "no"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
+        ],
+        ["property", "Value", name,
+            ["at", f"{x:.3f}", f"{y+2.54:.3f}", "0"],
+            ["show_name", "no"], ["do_not_autoplace", "no"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
+        ],
+        ["property", "Footprint", "",
+            ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+            ["hide", "yes"], ["show_name", "no"], ["do_not_autoplace", "no"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
+        ],
+        ["property", "Datasheet", "",
+            ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+            ["hide", "yes"], ["show_name", "no"], ["do_not_autoplace", "no"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
+        ],
+        ["property", "Description", "",
+            ["at", f"{x:.3f}", f"{y:.3f}", "0"],
+            ["show_name", "no"], ["do_not_autoplace", "no"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
+        ],
+        ["pin", "1", ["uuid", uid_pin]],
+        ["instances",
+            ["project", project_name,
+                ["path", f"/{sch_uuid}",
+                    ["reference", pwr_ref],
+                    ["unit", "1"]
+                ]
+            ]
+        ]
+    ]
+
+
+def _side_to_angle(side):
+    return {"left": 180, "right": 0, "up": 90, "down": 270}.get(side.lower(), 0)
+
+
+def _resolve_pin_position(pin_str, instances_by_ref, local_definitions, lib_map, project_dir):
+    """Resolve 'REF:PINNAME' → (gx, gy). Returns None if not found."""
+    if ':' not in pin_str:
+        return None
+    ref, pin_ref = pin_str.split(':', 1)
+    inst = instances_by_ref.get(ref)
+    if not inst:
+        return None
+    lib_id = inst['lib_id']
+    defn = local_definitions.get(lib_id)
+    if not defn and lib_id and ':' in lib_id:
+        lib_name, sym_name = lib_id.split(':', 1)
+        defn = find_symbol_definition(lib_name, sym_name, lib_map, project_dir)
+    if not defn:
+        return None
+    pin_data = find_pin_local_data(defn, pin_ref)
+    if not pin_data:
+        return None
+    tx, ty, angle, mx, my = get_symbol_instance_transform(inst['sexpr'])
+    gx, gy = transform_pin_coordinate(pin_data[0], pin_data[1], tx, ty, angle, mx, my)
+    return gx, gy
+
+
+def _load_instances(sch_sexpr):
+    instances_by_ref = {}
+    for child in sch_sexpr[1:]:
+        if isinstance(child, list) and child[0] == 'symbol':
+            lib_id_val = ref_val = None
+            for sub in child[1:]:
+                if isinstance(sub, list) and len(sub) > 1:
+                    if sub[0] == 'lib_id':
+                        lib_id_val = sub[1]
+                    elif sub[0] == 'property' and len(sub) > 2 and sub[1] == 'Reference':
+                        ref_val = sub[2]
+            if ref_val:
+                instances_by_ref[ref_val] = {'sexpr': child, 'lib_id': lib_id_val}
+    return instances_by_ref
+
+
+def annotate_schematic(schematic_path, table_path, annotations):
+    """Add annotations to a KiCad schematic.
+
+    Each annotation dict fields:
+      type         : "global_label" | "power" | "no_connect" | "junction"
+      pin          : "REF:PINNAME"  — resolve position from symbol pin (optional)
+      x, y         : explicit coordinates (used when 'pin' absent)
+      -- global_label only --
+      name         : net label name
+      shape        : input | output | bidirectional | passive | tri_state
+      angle        : 0 | 90 | 180 | 270  (overrides 'side')
+      side         : left | right | up | down  (converted to angle)
+      stub         : stub wire length in mm (default 0 = label at pin, no wire)
+      -- power only --
+      name         : power net name (e.g. "GND", "+3V3")
+
+    Returns total number of elements added.
+    """
+    project_dir = os.path.dirname(os.path.abspath(schematic_path))
+    project_name = os.path.splitext(os.path.basename(schematic_path))[0]
+    lib_map = load_sym_lib_table(table_path)
+
+    with open(schematic_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    sch_sexpr = parse_sexpr(content)
+
+    if not sch_sexpr or sch_sexpr[0] != 'kicad_sch':
+        raise ValueError(f"Invalid KiCad schematic: {schematic_path}")
+
+    sch_uuid = _get_sch_uuid(sch_sexpr)
+    lib_syms = get_or_create_lib_symbols(sch_sexpr)
+
+    local_definitions = {}
+    for child in lib_syms[1:]:
+        if isinstance(child, list) and child[0] == 'symbol' and len(child) > 1:
+            local_definitions[child[1]] = child
+
+    instances_by_ref = _load_instances(sch_sexpr)
+
+    added = 0
+
+    for ann in annotations:
+        ann_type = ann.get('type', '').lower()
+
+        # Resolve position
+        x, y = ann.get('x'), ann.get('y')
+        if 'pin' in ann:
+            pos = _resolve_pin_position(
+                ann['pin'], instances_by_ref, local_definitions, lib_map, project_dir
+            )
+            if pos is None:
+                print(f"Warning: Cannot resolve pin '{ann['pin']}'. Skipping.")
+                continue
+            x, y = pos
+
+        if x is None or y is None:
+            print(f"Warning: No position for annotation {ann}. Skipping.")
+            continue
+
+        x, y = float(x), float(y)
+
+        if ann_type == 'global_label':
+            name = ann.get('name')
+            if not name:
+                print(f"Warning: global_label missing 'name'. Skipping.")
+                continue
+            shape = ann.get('shape', 'passive')
+            angle = ann.get('angle')
+            if angle is None:
+                side = ann.get('side', 'right')
+                angle = _side_to_angle(side)
+            angle = int(angle)
+            stub = float(ann.get('stub', 0.0))
+
+            lx, ly = x, y
+            if stub > 0:
+                offsets = {180: (-stub, 0), 0: (stub, 0), 90: (0, -stub), 270: (0, stub)}
+                dx, dy = offsets.get(angle, (stub, 0))
+                lx, ly = x + dx, y + dy
+                sch_sexpr.append(make_wire_sexpr(x, y, lx, ly))
+                added += 1
+
+            sch_sexpr.append(make_global_label_sexpr(name, shape, lx, ly, angle))
+            added += 1
+
+        elif ann_type == 'power':
+            name = ann.get('name', 'GND')
+            pwr_ref = _next_pwr_ref(sch_sexpr)
+            lib_id = f"power:{name}"
+            if lib_id not in local_definitions:
+                power_def = find_symbol_definition("power", name, lib_map, project_dir)
+                if power_def:
+                    power_def = list(power_def)
+                    power_def[1] = lib_id
+                    add_symbol_def_to_schematic(sch_sexpr, power_def)
+                    local_definitions[lib_id] = power_def
+                else:
+                    print(f"Warning: power symbol '{name}' not found in library.")
+            sch_sexpr.append(_make_power_instance(name, x, y, pwr_ref, sch_uuid, project_name))
+            added += 1
+
+        elif ann_type == 'no_connect':
+            sch_sexpr.append(make_no_connect_sexpr(x, y))
+            added += 1
+
+        elif ann_type == 'junction':
+            sch_sexpr.append(make_junction_sexpr(x, y))
+            added += 1
+
+        else:
+            print(f"Warning: Unknown annotation type '{ann_type}'. Skipping.")
+
+    sch_sexpr[1:] = dedupe_wire_children(sch_sexpr[1:])
+
+    with open(schematic_path, 'w', encoding='utf-8') as f:
+        f.write(format_sexpr(sch_sexpr))
+
+    return added
 
