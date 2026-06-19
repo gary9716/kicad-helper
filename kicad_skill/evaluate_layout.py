@@ -175,6 +175,60 @@ def evaluate_schematic_layout(sch_path, table_path):
     if overlaps_count > 0:
         deductions += min(overlaps_count * 10, 25)
 
+    # --- CHECK 2b: Intra-symbol pin crowding ---
+    # Multiple pins on the same side at < 3.0mm pitch → rotated labels overlap visually.
+    # Threshold: KiCad default font 1.27mm; a typical 7-char name = ~8mm when rotated 90°.
+    # Two top/bottom pins within 3.0mm horizontal distance will have overlapping labels.
+    PIN_CROWD_THRESH = 3.0
+    crowding_errors = 0
+    for inst in symbols:
+        _ref, _lib_id = '', ''
+        for s in inst[1:]:
+            if isinstance(s, list) and len(s) > 1:
+                if s[0] == 'lib_id': _lib_id = s[1]
+                elif s[0] == 'property' and len(s) > 2 and s[1] == 'Reference': _ref = s[2]
+        _defn = local_definitions.get(_lib_id)
+        if not _defn and ':' in _lib_id:
+            _ln, _sn = _lib_id.split(':', 1)
+            _defn = find_symbol_definition(_ln, _sn, lib_map, project_dir)
+        if not _defn:
+            continue
+        # Collect pins by side (angle in symbol definition): 90/270 = top/bottom
+        _sp = get_symbol_pins_global(inst, _defn)
+        # Group global pin positions by their side, using rounded coords
+        # We detect "same-side" by checking if pins have same global-x (vertical side)
+        # or same global-y (horizontal side). Cluster pins by rounded coord.
+        from collections import defaultdict
+        by_row = defaultdict(list)  # round(y, 1) → list of x (top/bottom pins)
+        by_col = defaultdict(list)  # round(x, 1) → list of y (left/right pins)
+        for _p in _sp:
+            by_row[round(_p['y'], 1)].append(_p['x'])
+            by_col[round(_p['x'], 1)].append(_p['y'])
+        for row_y, xs in by_row.items():
+            if len(xs) < 2: continue
+            xs_sorted = sorted(xs)
+            for i in range(len(xs_sorted) - 1):
+                gap = xs_sorted[i+1] - xs_sorted[i]
+                if gap < PIN_CROWD_THRESH:
+                    crowding_errors += 1
+                    if crowding_errors <= 5:
+                        issues.append(f"[WARN:CROWDED] {_ref}: {len(xs)} pins on same horizontal row y={row_y:.1f}mm, min gap {gap:.2f}mm — rotated labels will overlap")
+                    break
+        for col_x, ys in by_col.items():
+            if len(ys) < 2: continue
+            ys_sorted = sorted(ys)
+            for i in range(len(ys_sorted) - 1):
+                gap = ys_sorted[i+1] - ys_sorted[i]
+                # Left/right pins have horizontal labels — need less space
+                if gap < 2.0:
+                    crowding_errors += 1
+                    if crowding_errors <= 5:
+                        issues.append(f"[WARN:CROWDED] {_ref}: {len(ys)} pins on same vertical col x={col_x:.1f}mm, min gap {gap:.2f}mm — labels may overlap")
+                    break
+
+    if crowding_errors > 0:
+        deductions += min(crowding_errors * 3, 15)
+
     # --- CHECK 3: Open / Dangling Connections (Max Deduction: 25) ---
     pins = []
     for inst in symbols:
