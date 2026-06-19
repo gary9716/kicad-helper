@@ -192,10 +192,10 @@ def evaluate_schematic_layout(sch_path, table_path):
             return BoundingBox(lx, ly - h/2, lx + w, ly + h/2)
         elif a == 180:  # extends left
             return BoundingBox(lx - w, ly - h/2, lx, ly + h/2)
-        elif a == 90:   # extends down (stub up)
-            return BoundingBox(lx - h/2, ly, lx + h/2, ly + w)
-        else:           # angle=270: extends up (stub down)
+        elif a == 90:   # attachment at bottom, label extends UP (y decreasing)
             return BoundingBox(lx - h/2, ly - w, lx + h/2, ly)
+        else:           # angle=270: attachment at top, label extends DOWN (y increasing)
+            return BoundingBox(lx - h/2, ly, lx + h/2, ly + w)
 
     label_bboxes = []
     for l in labels:
