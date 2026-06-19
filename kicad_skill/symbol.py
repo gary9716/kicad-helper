@@ -101,11 +101,13 @@ def generate_symbol_sexpr(name, pins, ref_prefix="U", width=10.16, height=None, 
         ],
         ["property", "Footprint", "", 
             ["at", "0", "0", "0"], 
-            ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]
+            ["hide", "yes"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
         ],
         ["property", "Datasheet", "", 
             ["at", "0", "0", "0"], 
-            ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]
+            ["hide", "yes"],
+            ["effects", ["font", ["size", "1.27", "1.27"]]]
         ],
     ]
     

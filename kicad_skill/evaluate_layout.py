@@ -175,6 +175,59 @@ def evaluate_schematic_layout(sch_path, table_path):
     if overlaps_count > 0:
         deductions += min(overlaps_count * 10, 25)
 
+    # --- CHECK 2c: Global label bounding-box overlaps ---
+    # A global_label at angle=0/180 has a box: height≈3.81mm centered on y,
+    # width ≈ (chars*1.5 + 3) mm extending in the label direction.
+    # Two labels at the same x and < 3.81mm apart in y will always overlap.
+    LABEL_H = 3.81  # observed in KiCad SVG output for 1.27mm font
+    LABEL_CHAR_W = 1.5  # mm per char (approx)
+    LABEL_BASE_W = 3.0  # fixed stub+margin mm
+
+    def _label_bbox(lx, ly, angle, name):
+        """Axis-aligned bounding box of a global label in mm."""
+        w = len(name) * LABEL_CHAR_W + LABEL_BASE_W
+        h = LABEL_H
+        a = int(float(angle))
+        if a == 0:    # extends right
+            return BoundingBox(lx, ly - h/2, lx + w, ly + h/2)
+        elif a == 180:  # extends left
+            return BoundingBox(lx - w, ly - h/2, lx, ly + h/2)
+        elif a == 90:   # extends down (stub up)
+            return BoundingBox(lx - h/2, ly, lx + h/2, ly + w)
+        else:           # angle=270: extends up (stub down)
+            return BoundingBox(lx - h/2, ly - w, lx + h/2, ly)
+
+    label_bboxes = []
+    for l in labels:
+        lname = l[1] if len(l) > 1 and isinstance(l[1], str) else None
+        if not lname:
+            continue
+        at_n = next((s for s in l[1:] if isinstance(s, list) and s[0] == 'at'), None)
+        if not at_n:
+            continue
+        lx, ly, la = float(at_n[1]), float(at_n[2]), at_n[3]
+        label_bboxes.append((lname, _label_bbox(lx, ly, la, lname)))
+
+    label_overlap_count = 0
+    for i in range(len(label_bboxes)):
+        for j in range(i + 1, len(label_bboxes)):
+            n1, b1 = label_bboxes[i]
+            n2, b2 = label_bboxes[j]
+            # Compute actual overlap depth (not just boolean)
+            x_overlap = min(b1.xmax, b2.xmax) - max(b1.xmin, b2.xmin)
+            y_overlap = min(b1.ymax, b2.ymax) - max(b1.ymin, b2.ymin)
+            if x_overlap > 0 and y_overlap > 0:
+                area = x_overlap * y_overlap
+                # Only warn on significant overlaps (>2mm² area) — standard 2.54mm pitch
+                # gives ~1.27mm y-overlap with 1mm x-overlap = ~1.3mm² which we skip.
+                if area > 2.0:
+                    label_overlap_count += 1
+                    if label_overlap_count <= 10:
+                        issues.append(f"[WARN:LABEL-OVERLAP] '{n1}' and '{n2}' overlap {area:.1f}mm² — increase spacing to >{LABEL_H:.1f}mm")
+
+    if label_overlap_count > 0:
+        deductions += min(label_overlap_count * 5, 20)
+
     # --- CHECK 2b: Intra-symbol pin crowding ---
     # Multiple pins on the same side at < 3.0mm pitch → rotated labels overlap visually.
     # Threshold: KiCad default font 1.27mm; a typical 7-char name = ~8mm when rotated 90°.

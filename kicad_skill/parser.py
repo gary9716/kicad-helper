@@ -97,7 +97,7 @@ def format_sexpr(node, indent_level=0, parent_tag=None, is_tag=False, child_idx=
                 return '""'
             
             # Check if this string must be quoted based on parent tag and index
-            QUOTED_VAL_TAGS = {'property', 'name', 'number', 'symbol', 'uuid', 'generator', 'generator_version', 'lib_id'}
+            QUOTED_VAL_TAGS = {'property', 'name', 'number', 'symbol', 'uuid', 'generator', 'generator_version', 'lib_id', 'global_label', 'label', 'hierarchical_label'}
             VALID_PIN_TYPES = {
                 'input', 'output', 'bidirectional', 'tri_state', 'passive',
                 'free', 'unspecified', 'power_in', 'power_out', 'open_collector',

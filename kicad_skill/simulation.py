@@ -159,7 +159,8 @@ def update_symbol_properties(symbol_sexpr, properties_dict):
             new_prop = [
                 'property', key, val,
                 ['at', '0', '0', '0'],
-                ['effects', ['font', ['size', '1.27', '1.27']], ['hide', 'yes']]
+                ['hide', 'yes'],
+                ['effects', ['font', ['size', '1.27', '1.27']]]
             ]
             symbol_sexpr.insert(insert_idx, new_prop)
             insert_idx += 1
