@@ -246,6 +246,73 @@ def handle_annotate(args):
         sys.exit(1)
 
 
+def handle_snapshot(args):
+    import subprocess, shutil
+    KICAD_CLI = '/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli'
+    if not os.path.exists(KICAD_CLI):
+        # Try PATH
+        KICAD_CLI = shutil.which('kicad-cli') or ''
+    if not KICAD_CLI:
+        print("Error: kicad-cli not found. Install KiCad 7+.", file=sys.stderr)
+        sys.exit(1)
+
+    sch = os.path.abspath(args.schematic)
+    if not os.path.exists(sch):
+        print(f"Error: schematic not found: {sch}", file=sys.stderr)
+        sys.exit(1)
+
+    fmt = args.fmt
+    if args.output:
+        out = os.path.abspath(args.output)
+    else:
+        base = os.path.splitext(sch)[0]
+        out = base + '.' + fmt
+
+    out_dir = os.path.dirname(out)
+    out_name = os.path.basename(out)
+
+    cmd = [KICAD_CLI, 'sch', 'export', fmt,
+           '--output', out_dir,
+           sch]
+    if args.theme:
+        cmd += ['--theme', args.theme]
+    if args.black_and_white:
+        cmd.append('--black-and-white')
+    if args.pages:
+        cmd += ['--pages', args.pages]
+
+    print(f"Running: {' '.join(cmd)}")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        print("Error: kicad-cli timed out after 60s", file=sys.stderr)
+        sys.exit(1)
+
+    if result.returncode != 0:
+        print(f"kicad-cli failed (exit {result.returncode}):", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+
+    # kicad-cli names the file after the schematic; rename if output path differs
+    sch_stem = os.path.splitext(os.path.basename(sch))[0]
+    generated = os.path.join(out_dir, sch_stem + '.' + fmt)
+    if generated != out and os.path.exists(generated):
+        os.rename(generated, out)
+        generated = out
+
+    if os.path.exists(generated):
+        size = os.path.getsize(generated)
+        print(f"Snapshot written: {generated} ({size} bytes)")
+    else:
+        # SVG might be in a subdir
+        import glob
+        found = glob.glob(os.path.join(out_dir, '**', '*.' + fmt), recursive=True)
+        if found:
+            print(f"Snapshot written: {found[0]}")
+        else:
+            print(f"Warning: output file not found after export. kicad-cli stdout:\n{result.stdout}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="KiCad Helper: Symbol Creator and Collision-Free Placement Tool")
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
@@ -325,8 +392,17 @@ def main():
     ann_parser.add_argument("--annotations-json", required=True, help="JSON array of annotation objects, or path to a JSON file")
     ann_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
 
+    # snapshot parser
+    snap_parser = subparsers.add_parser("snapshot", help="Export schematic as SVG/PDF ground-truth snapshot via kicad-cli")
+    snap_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    snap_parser.add_argument("--output", help="Output file path (default: <schematic>.svg next to schematic)")
+    snap_parser.add_argument("--format", choices=["svg", "pdf"], default="svg", dest="fmt", help="Export format (default: svg)")
+    snap_parser.add_argument("--theme", default="", help="KiCad color theme name (default: schematic default)")
+    snap_parser.add_argument("--black-and-white", action="store_true", help="Monochrome output")
+    snap_parser.add_argument("--pages", default="", help="Comma-separated page numbers (default: all)")
+
     args = parser.parse_args()
-    
+
     if args.command == "create-symbol":
         handle_create_symbol(args)
     elif args.command == "place":
@@ -345,6 +421,8 @@ def main():
         handle_simplify_wires(args)
     elif args.command == 'annotate':
         handle_annotate(args)
+    elif args.command == 'snapshot':
+        handle_snapshot(args)
     else:
         parser.print_help()
 
