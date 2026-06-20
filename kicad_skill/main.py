@@ -401,6 +401,15 @@ def main():
     snap_parser.add_argument("--black-and-white", action="store_true", help="Monochrome output")
     snap_parser.add_argument("--pages", default="", help="Comma-separated page numbers (default: all)")
 
+    # resolve parser
+    resolve_parser = subparsers.add_parser("resolve", help="Two-pass AABB layout resolver: intra-cluster then inter-cluster rigid-body")
+    resolve_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    resolve_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
+    resolve_parser.add_argument("--output", help="Output schematic path (default: overwrite input)")
+    resolve_parser.add_argument("--max-iter", type=int, default=50, help="Max MTV iterations per pass (default: 50)")
+    resolve_parser.add_argument("--grid", type=float, default=2.54, help="Grid snap in mm (default: 2.54)")
+    resolve_parser.add_argument("--dry-run", action="store_true", help="Compute moves but do not write output")
+
     args = parser.parse_args()
 
     if args.command == "create-symbol":
@@ -423,6 +432,25 @@ def main():
         handle_annotate(args)
     elif args.command == 'snapshot':
         handle_snapshot(args)
+    elif args.command == 'resolve':
+        from .resolve_layout import resolve_schematic_layout
+        import os
+        table = args.table or os.path.join(os.path.dirname(args.schematic), 'sym-lib-table')
+        res = resolve_schematic_layout(
+            args.schematic, table,
+            max_iter=args.max_iter,
+            grid=args.grid,
+            dry_run=args.dry_run,
+            out_path=args.output,
+        )
+        print(f"Clusters:     {res['clusters']}")
+        print(f"Pass-1 moves: {res['pass1_moves']}  (intra-cluster)")
+        print(f"Pass-2 moves: {res['pass2_moves']}  (inter-cluster rigid body)")
+        print(f"Remaining:    {res['remaining']}  symbol-symbol overlaps")
+        if res['remaining'] == 0:
+            print("OK — no overlaps remaining.")
+        else:
+            print(f"WARNING: {res['remaining']} overlap(s) unresolved — try --max-iter or check space.")
     else:
         parser.print_help()
 
