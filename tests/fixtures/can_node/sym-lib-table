@@ -6,4 +6,18 @@
 		(options "")
 		(descr "")
 	)
+	(lib
+		(name "Device")
+		(type KiCad)
+		(uri "${KIPRJMOD}/Device.kicad_sym")
+		(options "")
+		(descr "")
+	)
+	(lib
+		(name "Connector_Generic")
+		(type KiCad)
+		(uri "${KIPRJMOD}/Connector_Generic.kicad_sym")
+		(options "")
+		(descr "")
+	)
 )
