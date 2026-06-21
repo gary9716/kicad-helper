@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -24,6 +25,51 @@ class TestInjectLibEntry(unittest.TestCase):
         result = _inject_lib_entry(content, 'New', '  (lib (name "New") (uri "/b"))')
         self.assertIn('(name "Existing")', result)
         self.assertIn('(name "New")', result)
+
+
+class TestValidateSource(unittest.TestCase):
+    def _make_ul_dir(self, tmp, has_sym=True, has_fp=True):
+        """Build a minimal Ultra Librarian KiCADv6 folder structure."""
+        kv6 = os.path.join(tmp, 'KiCADv6')
+        os.makedirs(kv6)
+        if has_sym:
+            open(os.path.join(kv6, '2026-01-01_00-00-00.kicad_sym'), 'w').close()
+        if has_fp:
+            os.makedirs(os.path.join(kv6, 'footprints.pretty'))
+        return tmp
+
+    def test_valid_source_returns_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_ul_dir(tmp)
+            from kicad_skill.import_lib import validate_source
+            result = validate_source(tmp)
+            self.assertIn('sym_path', result)
+            self.assertIn('fp_dir', result)
+            self.assertTrue(result['sym_path'].endswith('.kicad_sym'))
+            self.assertTrue(os.path.isdir(result['fp_dir']))
+
+    def test_missing_kicadv6_dir_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from kicad_skill.import_lib import validate_source
+            with self.assertRaises(ValueError) as ctx:
+                validate_source(tmp)
+            self.assertIn('KiCADv6', str(ctx.exception))
+
+    def test_missing_sym_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_ul_dir(tmp, has_sym=False)
+            from kicad_skill.import_lib import validate_source
+            with self.assertRaises(ValueError) as ctx:
+                validate_source(tmp)
+            self.assertIn('.kicad_sym', str(ctx.exception))
+
+    def test_missing_fp_dir_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_ul_dir(tmp, has_fp=False)
+            from kicad_skill.import_lib import validate_source
+            with self.assertRaises(ValueError) as ctx:
+                validate_source(tmp)
+            self.assertIn('footprints.pretty', str(ctx.exception))
 
 
 if __name__ == '__main__':
