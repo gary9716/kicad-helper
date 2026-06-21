@@ -160,5 +160,20 @@ class TestTableRegistration(unittest.TestCase):
             self.assertFalse(result)
 
 
+class TestFindGlobalTableDir(unittest.TestCase):
+    def test_returns_latest_version_dir(self):
+        with tempfile.TemporaryDirectory() as base:
+            os.makedirs(os.path.join(base, '9.0'))
+            os.makedirs(os.path.join(base, '10.0'))
+            from kicad_skill.import_lib import _find_global_table_dir
+            result = _find_global_table_dir(base)
+            self.assertTrue(result.endswith('10.0'))
+
+    def test_raises_if_base_missing(self):
+        from kicad_skill.import_lib import _find_global_table_dir
+        with self.assertRaises(FileNotFoundError):
+            _find_global_table_dir('/nonexistent/path/kicad')
+
+
 if __name__ == '__main__':
     unittest.main()
