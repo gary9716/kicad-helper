@@ -410,6 +410,13 @@ def main():
     resolve_parser.add_argument("--grid", type=float, default=2.54, help="Grid snap in mm (default: 2.54)")
     resolve_parser.add_argument("--dry-run", action="store_true", help="Compute moves but do not write output")
 
+    # import-lib parser
+    import_lib_parser = subparsers.add_parser("import-lib", help="Import a KiCad v6+ Ultra Librarian component into local library")
+    import_lib_parser.add_argument("source_path", help="Path to the Ultra Librarian download folder")
+    import_lib_parser.add_argument("--lib-root", default="~/hardwares/Libraries", help="Root directory for installed libraries (default: ~/hardwares/Libraries)")
+    import_lib_parser.add_argument("--project", default=None, help="Path to .kicad_pro for project-level registration (default: global)")
+    import_lib_parser.add_argument("--force", action="store_true", help="Overwrite if component already exists in lib-root")
+
     args = parser.parse_args()
 
     if args.command == "create-symbol":
@@ -451,6 +458,9 @@ def main():
             print("OK — no overlaps remaining.")
         else:
             print(f"WARNING: {res['remaining']} overlap(s) unresolved — try --max-iter or check space.")
+    elif args.command == 'import-lib':
+        from .import_lib import handle_import_lib
+        handle_import_lib(args)
     else:
         parser.print_help()
 
