@@ -108,5 +108,55 @@ class TestCopyComponent(unittest.TestCase):
             self.assertTrue(os.path.exists(result['dest_sym']))
 
 
+class TestTableRegistration(unittest.TestCase):
+    def test_register_symbol_adds_entry(self):
+        with tempfile.TemporaryDirectory() as d:
+            table = os.path.join(d, 'sym-lib-table')
+            with open(table, 'w') as f:
+                f.write('(sym_lib_table\n  (version 7)\n)')
+            from kicad_skill.import_lib import register_symbol
+            result = register_symbol(d, 'ul_TEST', '/path/test.kicad_sym')
+            self.assertTrue(result)
+            content = open(table).read()
+            self.assertIn('(name "ul_TEST")', content)
+            self.assertIn('/path/test.kicad_sym', content)
+
+    def test_register_symbol_skips_if_already_present(self):
+        with tempfile.TemporaryDirectory() as d:
+            table = os.path.join(d, 'sym-lib-table')
+            with open(table, 'w') as f:
+                f.write('(sym_lib_table\n  (lib (name "ul_TEST") (uri "/path/test.kicad_sym"))\n)')
+            from kicad_skill.import_lib import register_symbol
+            result = register_symbol(d, 'ul_TEST', '/path/test.kicad_sym')
+            self.assertFalse(result)
+
+    def test_register_symbol_creates_table_if_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            from kicad_skill.import_lib import register_symbol
+            result = register_symbol(d, 'ul_TEST', '/path/test.kicad_sym')
+            self.assertTrue(result)
+            self.assertTrue(os.path.exists(os.path.join(d, 'sym-lib-table')))
+
+    def test_register_footprint_adds_entry(self):
+        with tempfile.TemporaryDirectory() as d:
+            table = os.path.join(d, 'fp-lib-table')
+            with open(table, 'w') as f:
+                f.write('(fp_lib_table\n  (version 7)\n)')
+            from kicad_skill.import_lib import register_footprint
+            result = register_footprint(d, 'ul_TEST', '/path/test.pretty')
+            self.assertTrue(result)
+            content = open(table).read()
+            self.assertIn('(name "ul_TEST")', content)
+
+    def test_register_footprint_skips_if_already_present(self):
+        with tempfile.TemporaryDirectory() as d:
+            table = os.path.join(d, 'fp-lib-table')
+            with open(table, 'w') as f:
+                f.write('(fp_lib_table\n  (lib (name "ul_TEST") (uri "/path/test.pretty"))\n)')
+            from kicad_skill.import_lib import register_footprint
+            result = register_footprint(d, 'ul_TEST', '/path/test.pretty')
+            self.assertFalse(result)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -39,3 +39,33 @@ def copy_component(source_path: str, lib_root: str, component_name: str, force: 
 
     sym_files = glob.glob(os.path.join(dest, '*.kicad_sym'))
     return {'dest_sym': sym_files[0], 'dest_fp_dir': os.path.join(dest, 'footprints.pretty')}
+
+
+_MINIMAL_SYM_TABLE = '(sym_lib_table\n  (version 7)\n)'
+_MINIMAL_FP_TABLE = '(fp_lib_table\n  (version 7)\n)'
+
+
+def register_symbol(table_dir: str, name: str, sym_uri: str) -> bool:
+    """Add symbol lib entry to sym-lib-table. Returns True if added, False if already present."""
+    table_path = os.path.join(table_dir, 'sym-lib-table')
+    content = open(table_path).read() if os.path.exists(table_path) else _MINIMAL_SYM_TABLE
+    entry = f'  (lib (name "{name}") (type "KiCad") (uri "{sym_uri}") (options "") (descr ""))'
+    result = _inject_lib_entry(content, name, entry)
+    if result is None:
+        return False
+    with open(table_path, 'w') as f:
+        f.write(result)
+    return True
+
+
+def register_footprint(table_dir: str, name: str, fp_uri: str) -> bool:
+    """Add footprint lib entry to fp-lib-table. Returns True if added, False if already present."""
+    table_path = os.path.join(table_dir, 'fp-lib-table')
+    content = open(table_path).read() if os.path.exists(table_path) else _MINIMAL_FP_TABLE
+    entry = f'  (lib (name "{name}") (type "KiCad") (uri "{fp_uri}") (options "") (descr ""))'
+    result = _inject_lib_entry(content, name, entry)
+    if result is None:
+        return False
+    with open(table_path, 'w') as f:
+        f.write(result)
+    return True
