@@ -25,3 +25,17 @@ def validate_source(source_path: str) -> dict:
         raise ValueError(f"No footprints.pretty/ directory found in {kicad_dir}")
 
     return {'sym_path': sym_files[0], 'fp_dir': fp_dir}
+
+
+def copy_component(source_path: str, lib_root: str, component_name: str, force: bool = False) -> dict:
+    """Copy KiCADv6/ tree to <lib_root>/<component_name>/KiCADv6/."""
+    dest = os.path.join(os.path.expanduser(lib_root), component_name, 'KiCADv6')
+    if os.path.exists(dest):
+        if not force:
+            raise FileExistsError(f"{dest} already exists — use --force to overwrite")
+        shutil.rmtree(dest)
+
+    shutil.copytree(os.path.join(source_path, 'KiCADv6'), dest)
+
+    sym_files = glob.glob(os.path.join(dest, '*.kicad_sym'))
+    return {'dest_sym': sym_files[0], 'dest_fp_dir': os.path.join(dest, 'footprints.pretty')}

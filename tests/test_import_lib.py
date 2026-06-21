@@ -72,5 +72,41 @@ class TestValidateSource(unittest.TestCase):
             self.assertIn('footprints.pretty', str(ctx.exception))
 
 
+class TestCopyComponent(unittest.TestCase):
+    def _make_ul_dir(self, tmp):
+        kv6 = os.path.join(tmp, 'KiCADv6')
+        os.makedirs(kv6)
+        open(os.path.join(kv6, '2026-01-01_00-00-00.kicad_sym'), 'w').close()
+        fp = os.path.join(kv6, 'footprints.pretty')
+        os.makedirs(fp)
+        open(os.path.join(fp, 'PKG.kicad_mod'), 'w').close()
+        return tmp
+
+    def test_copies_to_lib_root(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as lib_root:
+            self._make_ul_dir(src)
+            from kicad_skill.import_lib import copy_component
+            result = copy_component(src, lib_root, 'ul_TEST')
+            self.assertTrue(os.path.exists(result['dest_sym']))
+            self.assertTrue(os.path.isdir(result['dest_fp_dir']))
+            self.assertTrue(result['dest_sym'].endswith('.kicad_sym'))
+
+    def test_raises_if_dest_exists_without_force(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as lib_root:
+            self._make_ul_dir(src)
+            from kicad_skill.import_lib import copy_component
+            copy_component(src, lib_root, 'ul_TEST')
+            with self.assertRaises(FileExistsError):
+                copy_component(src, lib_root, 'ul_TEST', force=False)
+
+    def test_force_overwrites_existing(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as lib_root:
+            self._make_ul_dir(src)
+            from kicad_skill.import_lib import copy_component
+            copy_component(src, lib_root, 'ul_TEST')
+            result = copy_component(src, lib_root, 'ul_TEST', force=True)
+            self.assertTrue(os.path.exists(result['dest_sym']))
+
+
 if __name__ == '__main__':
     unittest.main()
