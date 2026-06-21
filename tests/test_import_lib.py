@@ -117,7 +117,8 @@ class TestTableRegistration(unittest.TestCase):
             from kicad_skill.import_lib import register_symbol
             result = register_symbol(d, 'ul_TEST', '/path/test.kicad_sym')
             self.assertTrue(result)
-            content = open(table).read()
+            with open(table) as f:
+                content = f.read()
             self.assertIn('(name "ul_TEST")', content)
             self.assertIn('/path/test.kicad_sym', content)
 
@@ -145,7 +146,8 @@ class TestTableRegistration(unittest.TestCase):
             from kicad_skill.import_lib import register_footprint
             result = register_footprint(d, 'ul_TEST', '/path/test.pretty')
             self.assertTrue(result)
-            content = open(table).read()
+            with open(table) as f:
+                content = f.read()
             self.assertIn('(name "ul_TEST")', content)
 
     def test_register_footprint_skips_if_already_present(self):
