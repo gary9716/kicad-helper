@@ -18,7 +18,7 @@ extraction to the `datasheets` skill and deep design-rule analysis to the
 `kicad` skill, and it drives the `kicad-helper` CLI only when the human asks.
 
 > **HARD RULE — never auto-draw.** This skill must NOT create or modify a
-> `.kicad_sch`, place symbols, or auto-route in design mode. It produces text
+> `.kicad_sch`, place symbols, or auto-route. It produces text
 > (`docs/checklist.md`, `docs/wiring_guide.md`) and the human draws. Symbol
 > placement / routing via `kicad-helper` happens only on the human's explicit
 > request, never as part of this workflow.
@@ -41,7 +41,7 @@ guide" → Mode A. "Review / DRC against checklist" → Mode B.
    (e.g. "12V → 5V/3A, ESP32 host"). State assumptions explicitly; ask if
    ambiguous.
 2. Locate the datasheet PDF(s) the user named under `docs/datasheets/`.
-3. **Delegate extraction to the `datasheets` skill.** Do not parse PDFs here.
+3. **Delegate extraction to the `datasheets` skill if installed; otherwise extract design rules from the datasheet PDF directly.** Do not parse PDFs here.
 4. Write **`docs/checklist.md`**, one section per IC, covering:
    - layout constraints (e.g. DCDC feedback trace away from the inductor, USB
      D+/D- differential routing),
@@ -61,8 +61,7 @@ guide" → Mode A. "Review / DRC against checklist" → Mode B.
    computed value, the nearest E-series standard value, and a suggested LCSC part
    / footprint. Typical items: inductor value, feedback divider R1/R2, soft-start
    cap, input/output bulk caps.
-2. Sanity-check the result if a SPICE model is cheap — the `spice` skill can
-   verify a divider ratio or filter corner. Optional.
+2. Sanity-check the result if a SPICE model is cheap — delegate to the `spice` skill if installed; otherwise skip simulation and state values are hand-computed. Optional.
 3. Write **`docs/wiring_guide.md`** as a **net-label-centric** table:
 
    | Net Name | Members (Ref:Pin …) | Route | Notes |
@@ -74,6 +73,9 @@ guide" → Mode A. "Review / DRC against checklist" → Mode B.
 
    - **One row per net.** `Members` lists every Ref:Pin on the net so the user
      places matching **net labels** in KiCad instead of drawing long wires.
+     Pin NAMES are fine for the human-facing wiring guide; anything feeding
+     ground-truth/evaluation must convert to pin NUMBERS per the
+     plan-ground-truth-netlist skill.
    - `Route` hint: default `label`. Use `wire` only for tight local 2–3 pin nets
      where a physical wire reads cleaner (e.g. SW node, a feedback tap).
    - Flag power and GND nets **"route first"** (matches kicad-helper routing
@@ -89,7 +91,7 @@ guide" → Mode A. "Review / DRC against checklist" → Mode B.
 
 1. Ask the user to provide either an exported KiCad netlist (`.net`) or a
    schematic screenshot (use multimodal reading for the screenshot).
-2. **Delegate deep design-rule / DRC analysis to the `kicad` skill.**
+2. **Delegate deep design-rule / DRC analysis to the `kicad` skill if installed; otherwise run DRC/review checks via the kicad-helper CLI and manual netlist inspection.**
 3. This skill's specific job: cross-reference the connectivity against
    `docs/checklist.md` and report, keyed to checklist items:
    - missing or insufficient decoupling capacitors vs the checklist,
@@ -105,10 +107,10 @@ guide" → Mode A. "Review / DRC against checklist" → Mode B.
 
 | Need | Use |
 | --- | --- |
-| Extract specs from a datasheet PDF | `datasheets` skill |
-| Deep schematic / netlist / DRC / power-tree analysis | `kicad` skill |
-| SPICE-validate a subcircuit (divider, filter) | `spice` skill |
-| Actually build/place/route geometry (human-driven) | `kicad-helper` CLI at `/Users/gary/kicad-helper/kicad-helper` |
+| Extract specs from a datasheet PDF | `datasheets` skill (optional — fallback inline if absent) |
+| Deep schematic / netlist / DRC / power-tree analysis | `kicad` skill (optional — fallback inline if absent) |
+| SPICE-validate a subcircuit (divider, filter) | `spice` skill (optional — fallback inline if absent) |
+| Actually build/place/route geometry (human-driven) | `kicad-helper` CLI at `/Users/ktchou/kicad-helper/kicad-helper` |
 
 ## Outputs recap
 
