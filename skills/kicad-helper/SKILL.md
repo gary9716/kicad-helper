@@ -10,17 +10,17 @@ This skill provides a Python package and CLI helper tool to automate symbol gene
 ## Location & Execution
 
 The `kicad-helper` CLI wrapper is located at:
-`/Users/gary/kicad-helper/kicad-helper`
+`/Users/ktchou/kicad-helper/kicad-helper`
 
 You can run CLI commands directly using:
-`/Users/gary/kicad-helper/kicad-helper <command> [args]`
+`/Users/ktchou/kicad-helper/kicad-helper <command> [args]`
 
 ## Subcommands Reference
 
 ### 1. Create a Symbol (`create-symbol`)
 Generates a custom KiCad symbol, calculates appropriate dimensions based on pin count and length to avoid label overlap, and saves it to a `.kicad_sym` library.
 ```bash
-/Users/gary/kicad-helper/kicad-helper create-symbol \
+/Users/ktchou/kicad-helper/kicad-helper create-symbol \
   --name "MY_CHIP" \
   --library "path/to/my_lib.kicad_sym" \
   --pins "left:1:VCC:power_in,right:2:GND:power_in" \
@@ -39,7 +39,7 @@ Generates a custom KiCad symbol, calculates appropriate dimensions based on pin 
 ### 2. Place Symbols and Resolve Overlaps (`place`)
 Places symbol instances in a schematic, resolves physical bounding-box overlaps, and snaps placement coordinates to the grid.
 ```bash
-/Users/gary/kicad-helper/kicad-helper place \
+/Users/ktchou/kicad-helper/kicad-helper place \
   --schematic "path/to/schematic.kicad_sch" \
   --placements '[{"lib_id": "lib:MY_CHIP", "reference": "U101", "x": 100.0, "y": 100.0, "angle": 0.0}]' \
   --margin 5.08
@@ -54,13 +54,13 @@ Places symbol instances in a schematic, resolves physical bounding-box overlaps,
 ### 3. Connect Pins with Orthogonal Wires (`connect`)
 Routes orthogonal wires (using A* search algorithm) on a strict 1.27 mm grid. It automatically bypasses component bodies and prevents collinear wire overlaps.
 ```bash
-/Users/gary/kicad-helper/kicad-helper connect \
+/Users/ktchou/kicad-helper/kicad-helper connect \
   --schematic "path/to/schematic.kicad_sch" \
   --connections "U101:VCC to U102:GND"
 ```
 * **Arguments:**
   - `--schematic`: Path to the `.kicad_sch` file.
-  - `--connections`: Connection shorthand (e.g. `Ref1:Pin1 to Ref2:Pin2`, comma-separated).
+  - `--connections`: Connection shorthand (e.g. `Ref1:Pin1 to Ref2:Pin2`, comma-separated). **Note:** this shorthand accepts pin NAMES, but ground-truth and evaluation work must use pin NUMBERS (e.g. `U1:14`, not `U1:VCC`) — pin names can collide across components. See the `plan-ground-truth-netlist` skill for evaluation-grade netlist work.
   - `--connections-json`: Path to JSON file/string of connections.
   - `--table`: Path to `sym-lib-table`.
   - `--diagonal`: Routes straight diagonal lines instead of L-shaped orthogonal lines (not recommended).
@@ -68,7 +68,7 @@ Routes orthogonal wires (using A* search algorithm) on a strict 1.27 mm grid. It
 ### 4. Create Hierarchical Module (`create-module`)
 Groups a set of components into a hierarchical sub-sheet. Intra-module connectivity is rebuilt using local labels, while boundary nets crossing sheet borders collapse to hierarchical sheet pins.
 ```bash
-/Users/gary/kicad-helper/kicad-helper create-module \
+/Users/ktchou/kicad-helper/kicad-helper create-module \
   --schematic "path/to/schematic.kicad_sch" \
   --components "U101,U102,R101" \
   --name "MyModule" \
@@ -83,7 +83,7 @@ Groups a set of components into a hierarchical sub-sheet. Intra-module connectiv
 ### 5. Simplify Wires (`simplify-wires`)
 Converts high-complexity wires (crossings/bends/length) to clean local net labels to reduce schematic clutter.
 ```bash
-/Users/gary/kicad-helper/kicad-helper simplify-wires \
+/Users/ktchou/kicad-helper/kicad-helper simplify-wires \
   --schematic "path/to/schematic.kicad_sch" \
   --threshold 50.0
 ```
@@ -91,7 +91,7 @@ Converts high-complexity wires (crossings/bends/length) to clean local net label
 ### 6. Run SPICE Simulation (`simulate`)
 Runs ngspice, LTspice, or Xyce simulation on detected schematic subcircuits (voltage dividers, RC/LC filters, op-amp circuits, decoupling networks).
 ```bash
-/Users/gary/kicad-helper/kicad-helper simulate \
+/Users/ktchou/kicad-helper/kicad-helper simulate \
   --schematic "path/to/schematic.kicad_sch" \
   --output "report.json"
 ```

@@ -11,7 +11,7 @@ A ground-truth netlist is the **authoritative** statement of which component pin
 
 **Core principle:** The ground truth is a *planned, user-confirmed* artifact grounded in cited trusted sources. It is never invented from memory, never finalized without per-net user confirmation, and never filled with placeholders.
 
-**Violating the letter of this process is violating the spirit of it.** A netlist that "looks right" but wasn't confirmed against a source and the user is not a ground truth — it is a guess wearing authority.
+**Following the steps while skipping user confirmation is still a violation of this process.** A netlist that "looks right" but wasn't confirmed against a source and the user is not a ground truth — it is a guess wearing authority.
 
 ## When to Use
 
@@ -30,7 +30,7 @@ highest  official reference design / eval-board netlist (proven hardware)
 lowest   the design's own "intended connections" (the thing under test — NOT ground truth on its own)
 ```
 
-The under-test connections are evidence of intent, not proof of correctness. Ground each net in the highest source you can, then confirm with the user.
+The under-test connections are evidence of intent, not proof of correctness. Ground each net in the highest source you can, then confirm with the user. For `trust: high`, the `source` field must cite a specific URL, page number, or section name — bare "datasheet" is not sufficient.
 
 ## The Process
 
