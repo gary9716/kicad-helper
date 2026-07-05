@@ -66,7 +66,7 @@ if __name__ == '__main__':
 - [ ] **Step 2: Run to verify fails**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py -v
 ```
 Expected: `ImportError: cannot import name '_inject_lib_entry'`
 
@@ -88,14 +88,14 @@ def _inject_lib_entry(content: str, name: str, new_entry: str):
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py -v
 ```
 Expected: 3 passed
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): S-expression injection utility"
+cd /Users/ktchou/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): S-expression injection utility"
 ```
 
 ---
@@ -162,7 +162,7 @@ class TestValidateSource(unittest.TestCase):
 - [ ] **Step 2: Run to verify fails**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py::TestValidateSource -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py::TestValidateSource -v
 ```
 Expected: `ImportError: cannot import name 'validate_source'`
 
@@ -192,14 +192,14 @@ def validate_source(source_path: str) -> dict:
 - [ ] **Step 4: Run tests**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py -v
 ```
 Expected: all pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): source validation"
+cd /Users/ktchou/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): source validation"
 ```
 
 ---
@@ -254,7 +254,7 @@ class TestCopyComponent(unittest.TestCase):
 - [ ] **Step 2: Run to verify fails**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py::TestCopyComponent -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py::TestCopyComponent -v
 ```
 Expected: `ImportError: cannot import name 'copy_component'`
 
@@ -281,14 +281,14 @@ def copy_component(source_path: str, lib_root: str, component_name: str, force: 
 - [ ] **Step 4: Run tests**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py -v
 ```
 Expected: all pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): component copy with force flag"
+cd /Users/ktchou/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): component copy with force flag"
 ```
 
 ---
@@ -357,7 +357,7 @@ class TestTableRegistration(unittest.TestCase):
 - [ ] **Step 2: Run to verify fails**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py::TestTableRegistration -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py::TestTableRegistration -v
 ```
 Expected: `ImportError: cannot import name 'register_symbol'`
 
@@ -400,14 +400,14 @@ def register_footprint(table_dir: str, name: str, fp_uri: str) -> bool:
 - [ ] **Step 4: Run all tests**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py -v
 ```
 Expected: all pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): sym/fp table registration"
+cd /Users/ktchou/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): sym/fp table registration"
 ```
 
 ---
@@ -441,7 +441,7 @@ class TestFindGlobalTableDir(unittest.TestCase):
 - [ ] **Step 2: Run to verify fails**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py::TestFindGlobalTableDir -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py::TestFindGlobalTableDir -v
 ```
 Expected: `ImportError: cannot import name '_find_global_table_dir'`
 
@@ -496,14 +496,14 @@ def handle_import_lib(args):
 - [ ] **Step 4: Run all tests**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/test_import_lib.py -v
+cd /Users/ktchou/kicad-helper && python -m pytest tests/test_import_lib.py -v
 ```
 Expected: all pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): handler and global config detection"
+cd /Users/ktchou/kicad-helper && git add kicad_skill/import_lib.py tests/test_import_lib.py && git commit -m "feat(import-lib): handler and global config detection"
 ```
 
 ---
@@ -539,21 +539,21 @@ In `main.py`, inside the `if args.command == ...` chain, add before the `else: p
 - [ ] **Step 3: Smoke test CLI help**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m kicad_skill.main import-lib --help
+cd /Users/ktchou/kicad-helper && python -m kicad_skill.main import-lib --help
 ```
 Expected output includes `source_path`, `--lib-root`, `--project`, `--force`.
 
 - [ ] **Step 4: Run all tests to verify no regressions**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m pytest tests/ -v --ignore=tests/test_flashlight_e2e.py
+cd /Users/ktchou/kicad-helper && python -m pytest tests/ -v --ignore=tests/test_flashlight_e2e.py
 ```
 Expected: all pass (e2e excluded — requires KiCad CLI)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add kicad_skill/main.py && git commit -m "feat(import-lib): wire subcommand into kicad-helper CLI"
+cd /Users/ktchou/kicad-helper && git add kicad_skill/main.py && git commit -m "feat(import-lib): wire subcommand into kicad-helper CLI"
 ```
 
 ---
@@ -565,8 +565,8 @@ cd /Users/gary/kicad-helper && git add kicad_skill/main.py && git commit -m "fea
 - [ ] **Step 1: Run import against temp lib-root**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m kicad_skill.main import-lib \
-  /Users/gary/Downloads/ul_TPS54540DDAR \
+cd /Users/ktchou/kicad-helper && python -m kicad_skill.main import-lib \
+  /Users/ktchou/Downloads/ul_TPS54540DDAR \
   --lib-root /tmp/kicad-test-libs \
   --project /tmp/kicad-test-libs
 ```
@@ -594,8 +594,8 @@ Expected: sym-lib-table and fp-lib-table contain `ul_TPS54540DDAR` entries.
 - [ ] **Step 3: Run again to verify idempotent**
 
 ```bash
-cd /Users/gary/kicad-helper && python -m kicad_skill.main import-lib \
-  /Users/gary/Downloads/ul_TPS54540DDAR \
+cd /Users/ktchou/kicad-helper && python -m kicad_skill.main import-lib \
+  /Users/ktchou/Downloads/ul_TPS54540DDAR \
   --lib-root /tmp/kicad-test-libs \
   --project /tmp/kicad-test-libs \
   --force
@@ -608,8 +608,8 @@ Expected: `already present` for both sym and fp tables (not duplicated).
 Once smoke test passes, run the real import:
 
 ```bash
-cd /Users/gary/kicad-helper && python -m kicad_skill.main import-lib \
-  /Users/gary/Downloads/ul_TPS54540DDAR \
+cd /Users/ktchou/kicad-helper && python -m kicad_skill.main import-lib \
+  /Users/ktchou/Downloads/ul_TPS54540DDAR \
   --lib-root ~/hardwares/Libraries
 ```
 
@@ -618,5 +618,5 @@ Expected: component installed in `~/hardwares/Libraries/ul_TPS54540DDAR/` and re
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/gary/kicad-helper && git add -A && git commit -m "feat(import-lib): complete — smoke test verified"
+cd /Users/ktchou/kicad-helper && git add -A && git commit -m "feat(import-lib): complete — smoke test verified"
 ```

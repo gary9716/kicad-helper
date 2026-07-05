@@ -592,7 +592,7 @@ if __name__ == "__main__":
 
 Run:
 ```bash
-cd /Users/gary/kicad-helper
+cd /Users/ktchou/kicad-helper
 uv run kicad_skill/regenerate.py --ground-truth scratch/mcp_test/can_node.groundtruth.json --table scratch/mcp_test/sym-lib-table --out scratch/mcp_test/can_node_clean.kicad_sch
 ```
 Expected: `[CLEAN] wrote ...` and exit 0.
@@ -601,7 +601,7 @@ Expected: `[CLEAN] wrote ...` and exit 0.
 
 Run:
 ```bash
-cd /Users/gary/kicad-helper
+cd /Users/ktchou/kicad-helper
 uv run kicad_skill/netlist_eval.py --schematic scratch/mcp_test/can_node_clean.kicad_sch --ground-truth scratch/mcp_test/can_node.groundtruth.json --table scratch/mcp_test/sym-lib-table
 ```
 Expected: `VERDICT: OK`, 0 shorts, 0 opens.
@@ -617,7 +617,7 @@ git commit -m "feat(regenerate): regenerate-from-gt CLI"
 
 ## Notes for the implementer
 
-- Run everything from `/Users/gary/kicad-helper` with `uv run`. Tests that touch `scratch/mcp_test` skip cleanly if the demo artifacts are absent — they are present on this branch.
+- Run everything from `/Users/ktchou/kicad-helper` with `uv run`. Tests that touch `scratch/mcp_test` skip cleanly if the demo artifacts are absent — they are present on this branch.
 - `place_symbols_and_resolve` may shift symbols to clear overlaps, so always read pin/center coords **after** placement (`_pin_coords`, `_centers_from_schematic`), never from the components block.
 - The fallback loop's safety rests on: an all-labels configuration has no trunk wires, so `extract_actual_netlist` cannot merge two nets. If the all-labels config still reports fatal, the GT itself is inconsistent (e.g. two pins at the same coordinate) — raising is correct (Rule 12, fail loud).
 - Do not commit `scratch/mcp_test/can_node_clean.kicad_sch` or `_*_test.kicad_sch` scratch outputs unless asked.

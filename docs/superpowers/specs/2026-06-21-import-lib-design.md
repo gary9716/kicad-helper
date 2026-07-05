@@ -83,7 +83,7 @@ source_path/KiCADv6/
 ## Output
 
 ```
-Copying ul_TPS54540DDAR → /Users/gary/hardwares/Libraries/ul_TPS54540DDAR/KiCADv6/
+Copying ul_TPS54540DDAR → /Users/ktchou/hardwares/Libraries/ul_TPS54540DDAR/KiCADv6/
   symbol:    2026-06-21_09-15-50.kicad_sym
   footprint: footprints.pretty/ (3 files)
 Registering in global sym-lib-table... done
