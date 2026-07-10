@@ -1,6 +1,65 @@
 import os
+import re
 import shutil
 import glob
+
+
+_FOOTPRINT_PROP_RE = re.compile(r'\(property "Footprint" "([^"]*)"')
+
+
+def check_footprint_namespace(sym_path: str, expected_ns: str) -> dict:
+    """Scan a .kicad_sym for Footprint properties and flag namespace problems.
+
+    Each Footprint property should read "expected_ns:FootprintName" so KiCad's
+    fp-lib-table lookup (registered under expected_ns) can resolve it. Returns
+    a dict with 'missing' (no ':' at all — the property is a bare footprint
+    name) and 'mismatched' (has a ':' but the prefix isn't expected_ns) lists,
+    each entry a (footprint_value, resolved_or_none) tuple.
+    """
+    with open(sym_path, encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+    missing = []
+    mismatched = []
+    seen = set()
+    for m in _FOOTPRINT_PROP_RE.finditer(content):
+        fp = m.group(1)
+        if not fp or fp in seen:
+            continue
+        seen.add(fp)
+        if ':' not in fp:
+            missing.append(fp)
+        else:
+            ns, _, name = fp.partition(':')
+            if ns != expected_ns:
+                mismatched.append(fp)
+
+    return {'missing': missing, 'mismatched': mismatched}
+
+
+def fix_footprint_namespace(sym_path: str, expected_ns: str, missing: list) -> int:
+    """Prepend 'expected_ns:' to bare (no-namespace) Footprint property values.
+
+    Only touches entries already identified as `missing` (no ':' at all) —
+    never rewrites an existing mismatched namespace, since that could be an
+    intentional cross-library reference. Returns count of replacements made.
+    """
+    with open(sym_path, encoding='utf-8') as f:
+        content = f.read()
+
+    count = 0
+    for fp in missing:
+        old = f'(property "Footprint" "{fp}"'
+        new = f'(property "Footprint" "{expected_ns}:{fp}"'
+        n = content.count(old)
+        if n:
+            content = content.replace(old, new)
+            count += n
+
+    if count:
+        with open(sym_path, 'w') as f:
+            f.write(content)
+    return count
 
 
 def _inject_lib_entry(content: str, name: str, new_entry: str):
@@ -94,6 +153,40 @@ def _find_global_table_dir(base: str = _DEFAULT_KICAD_PREFS) -> str:
     return os.path.join(base, versions[-1])
 
 
+def _resolve_table_scope(project_arg) -> tuple:
+    """Return (table_dir, scope) — 'project' if project_arg given, else 'global'."""
+    if project_arg:
+        project = os.path.expanduser(project_arg)
+        table_dir = os.path.dirname(project) if os.path.isfile(project) else project
+        return table_dir, "project"
+    return _find_global_table_dir(), "global"
+
+
+def register_and_check(paths: dict, component_name: str, table_dir: str, scope: str, fix_namespace: bool) -> None:
+    """Register a copied component's symbol+footprint in the lib tables and report Footprint namespace issues."""
+    added_sym = register_symbol(table_dir, component_name, paths['dest_sym'])
+    print(f"Registering in {scope} sym-lib-table... {'done' if added_sym else 'already present'}")
+
+    added_fp = register_footprint(table_dir, component_name, paths['dest_fp_dir'])
+    print(f"Registering in {scope} fp-lib-table...  {'done' if added_fp else 'already present'}")
+
+    ns_issues = check_footprint_namespace(paths['dest_sym'], component_name)
+    if ns_issues['missing']:
+        if fix_namespace:
+            fixed = fix_footprint_namespace(paths['dest_sym'], component_name, ns_issues['missing'])
+            print(f"Namespace check: fixed {fixed} bare Footprint reference(s) -> \"{component_name}:...\"")
+        else:
+            print(f"Namespace check: WARNING — {len(ns_issues['missing'])} Footprint reference(s) have no library "
+                  f"prefix (e.g. \"{ns_issues['missing'][0]}\" instead of \"{component_name}:{ns_issues['missing'][0]}\"). "
+                  f"KiCad will not resolve these until fixed. Re-run with --fix-namespace to patch automatically.")
+    if ns_issues['mismatched']:
+        print(f"Namespace check: WARNING — {len(ns_issues['mismatched'])} Footprint reference(s) point to a "
+              f"different library than the one just registered ({component_name}): {ns_issues['mismatched']}. "
+              f"Not auto-fixed — verify this is intentional (shared footprint library).")
+    if not ns_issues['missing'] and not ns_issues['mismatched']:
+        print("Namespace check: OK — all Footprint references resolve to the registered library.")
+
+
 def handle_import_lib(args):
     source_path = os.path.expanduser(args.source_path)
     lib_root = os.path.expanduser(args.lib_root)
@@ -108,16 +201,5 @@ def handle_import_lib(args):
     print(f"  symbol:    {os.path.basename(paths['dest_sym'])}")
     print(f"  footprint: footprints.pretty/ ({fp_count} file(s))")
 
-    if args.project:
-        project = os.path.expanduser(args.project)
-        table_dir = os.path.dirname(project) if os.path.isfile(project) else project
-        scope = "project"
-    else:
-        table_dir = _find_global_table_dir()
-        scope = "global"
-
-    added_sym = register_symbol(table_dir, component_name, paths['dest_sym'])
-    print(f"Registering in {scope} sym-lib-table... {'done' if added_sym else 'already present'}")
-
-    added_fp = register_footprint(table_dir, component_name, paths['dest_fp_dir'])
-    print(f"Registering in {scope} fp-lib-table...  {'done' if added_fp else 'already present'}")
+    table_dir, scope = _resolve_table_scope(args.project)
+    register_and_check(paths, component_name, table_dir, scope, args.fix_namespace)

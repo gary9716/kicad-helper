@@ -175,5 +175,65 @@ class TestFindGlobalTableDir(unittest.TestCase):
             _find_global_table_dir('/nonexistent/path/kicad')
 
 
+class TestResolveTableScope(unittest.TestCase):
+    def test_project_file_path_uses_its_dirname(self):
+        with tempfile.TemporaryDirectory() as d:
+            proj = os.path.join(d, 'sub', 'my.kicad_pro')
+            os.makedirs(os.path.dirname(proj))
+            open(proj, 'w').close()
+            from kicad_skill.import_lib import _resolve_table_scope
+            table_dir, scope = _resolve_table_scope(proj)
+            self.assertEqual(table_dir, os.path.dirname(proj))
+            self.assertEqual(scope, 'project')
+
+    def test_project_dir_path_used_as_is(self):
+        with tempfile.TemporaryDirectory() as d:
+            from kicad_skill.import_lib import _resolve_table_scope
+            table_dir, scope = _resolve_table_scope(d)
+            self.assertEqual(table_dir, d)
+            self.assertEqual(scope, 'project')
+
+    def test_no_project_falls_back_to_global(self):
+        from kicad_skill.import_lib import _resolve_table_scope, _find_global_table_dir
+        table_dir, scope = _resolve_table_scope(None)
+        self.assertEqual(table_dir, _find_global_table_dir())
+        self.assertEqual(scope, 'global')
+
+
+class TestRegisterAndCheck(unittest.TestCase):
+    def _make_component(self, tmp, footprint_value):
+        """dest_sym/dest_fp_dir shaped like copy_component()'s return value."""
+        sym = os.path.join(tmp, 'PART.kicad_sym')
+        content = (
+            '(kicad_symbol_lib (version 20211014)\n'
+            '  (symbol "PART"\n'
+            f'    (property "Footprint" "{footprint_value}" (id 2) (at 0 0 0))\n'
+            '  )\n)'
+        )
+        with open(sym, 'w') as f:
+            f.write(content)
+        fp_dir = os.path.join(tmp, 'footprints.pretty')
+        os.makedirs(fp_dir)
+        return {'dest_sym': sym, 'dest_fp_dir': fp_dir}
+
+    def test_registers_symbol_and_footprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = self._make_component(tmp, 'PART:PKG')
+            from kicad_skill.import_lib import register_and_check
+            register_and_check(paths, 'PART', tmp, 'global', fix_namespace=False)
+            with open(os.path.join(tmp, 'sym-lib-table')) as f:
+                self.assertIn('(name "PART")', f.read())
+            with open(os.path.join(tmp, 'fp-lib-table')) as f:
+                self.assertIn('(name "PART")', f.read())
+
+    def test_fix_namespace_patches_bare_footprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = self._make_component(tmp, 'PKG')
+            from kicad_skill.import_lib import register_and_check, check_footprint_namespace
+            register_and_check(paths, 'PART', tmp, 'global', fix_namespace=True)
+            after = check_footprint_namespace(paths['dest_sym'], 'PART')
+            self.assertEqual(after['missing'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

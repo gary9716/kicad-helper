@@ -416,6 +416,7 @@ def main():
     import_lib_parser.add_argument("--lib-root", default="~/hardwares/Libraries", help="Root directory for installed libraries (default: ~/hardwares/Libraries)")
     import_lib_parser.add_argument("--project", default=None, help="Path to .kicad_pro for project-level registration (default: global)")
     import_lib_parser.add_argument("--force", action="store_true", help="Overwrite if component already exists in lib-root")
+    import_lib_parser.add_argument("--fix-namespace", action="store_true", help="Auto-prepend the registered library name to bare (unnamespaced) Footprint properties in the copied .kicad_sym")
 
     args = parser.parse_args()
 
