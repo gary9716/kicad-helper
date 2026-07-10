@@ -14,7 +14,7 @@ def check_footprint_namespace(sym_path: str, expected_ns: str) -> dict:
     fp-lib-table lookup (registered under expected_ns) can resolve it. Returns
     a dict with 'missing' (no ':' at all — the property is a bare footprint
     name) and 'mismatched' (has a ':' but the prefix isn't expected_ns) lists,
-    each entry a (footprint_value, resolved_or_none) tuple.
+    each a list[str] of the raw Footprint property values.
     """
     with open(sym_path, encoding='utf-8', errors='ignore') as f:
         content = f.read()
