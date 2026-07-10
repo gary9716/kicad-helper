@@ -327,7 +327,10 @@ def handle_fetch_easyeda(args):
         print(f"Fetching {args.lcsc_id} from EasyEDA...")
         try:
             raw_base = fetch_easyeda_component(args.lcsc_id, staging)
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except FileNotFoundError:
+            print("Error: easyeda2kicad not found. Install with: pip install easyeda2kicad", file=sys.stderr)
+            sys.exit(1)
+        except subprocess.CalledProcessError:
             # easyeda2kicad already printed its own error to stderr (inherited, not captured) —
             # no extra wrapping, just a clean non-zero exit instead of a Python traceback.
             sys.exit(1)
