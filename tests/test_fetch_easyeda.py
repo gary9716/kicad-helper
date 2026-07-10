@@ -71,5 +71,44 @@ class TestRestructureToKicadv6(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(kv6, '3dshapes')))
 
 
+class TestImportFetchedComponent(unittest.TestCase):
+    def _make_staged_kicadv6(self, staging, footprint_value='C2040:PKG'):
+        kv6 = os.path.join(staging, 'KiCADv6')
+        os.makedirs(kv6)
+        sym = os.path.join(kv6, 'C2040.kicad_sym')
+        content = (
+            '(kicad_symbol_lib (version 20211014)\n'
+            '  (symbol "C2040"\n'
+            f'    (property "Footprint" "{footprint_value}" (id 2) (at 0 0 0))\n'
+            '  )\n)'
+        )
+        with open(sym, 'w') as f:
+            f.write(content)
+        fp_dir = os.path.join(kv6, 'footprints.pretty')
+        os.makedirs(fp_dir)
+        open(os.path.join(fp_dir, 'PKG.kicad_mod'), 'w').close()
+
+    def test_copies_and_registers(self):
+        with tempfile.TemporaryDirectory() as staging, tempfile.TemporaryDirectory() as lib_root, tempfile.TemporaryDirectory() as table_dir:
+            self._make_staged_kicadv6(staging)
+            from kicad_skill.fetch_easyeda import import_fetched_component
+            paths = import_fetched_component(staging, 'C2040', lib_root, table_dir, 'global')
+            self.assertTrue(os.path.exists(paths['dest_sym']))
+            self.assertTrue(os.path.isdir(paths['dest_fp_dir']))
+            with open(os.path.join(table_dir, 'sym-lib-table')) as f:
+                self.assertIn('(name "C2040")', f.read())
+            with open(os.path.join(table_dir, 'fp-lib-table')) as f:
+                self.assertIn('(name "C2040")', f.read())
+
+    def test_raises_on_existing_dest_without_force(self):
+        with tempfile.TemporaryDirectory() as staging, tempfile.TemporaryDirectory() as lib_root, tempfile.TemporaryDirectory() as table_dir:
+            self._make_staged_kicadv6(staging)
+            from kicad_skill.fetch_easyeda import import_fetched_component
+            import_fetched_component(staging, 'C2040', lib_root, table_dir, 'global')
+            # staging/KiCADv6 still exists — copy_component only copies, never moves the source.
+            with self.assertRaises(FileExistsError):
+                import_fetched_component(staging, 'C2040', lib_root, table_dir, 'global', force=False)
+
+
 if __name__ == '__main__':
     unittest.main()
