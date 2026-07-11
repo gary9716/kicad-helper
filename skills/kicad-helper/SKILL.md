@@ -96,6 +96,20 @@ Runs ngspice, LTspice, or Xyce simulation on detected schematic subcircuits (vol
   --output "report.json"
 ```
 
+### 7. Fetch & Import an EasyEDA/LCSC Component (`fetch-easyeda`)
+Fetches a component (symbol, footprint, and 3D model) from EasyEDA/LCSC via the `easyeda2kicad` CLI, then imports it into the local library and registers it in KiCad's sym-lib-table/fp-lib-table — the same registration flow used by `import-lib`.
+```bash
+/Users/ktchou/kicad-helper/kicad-helper fetch-easyeda C2040 \
+  --lib-root ~/hardwares/Libraries
+```
+* **Arguments:**
+  - `lcsc_id` (positional): LCSC part number, e.g. `C2040`.
+  - `--name`: Component/library name override (default: the LCSC id).
+  - `--lib-root`: Root directory for installed libraries (default: `~/hardwares/Libraries`).
+  - `--project`: Path to `.kicad_pro` for project-level table registration (default: global).
+  - `--force`: Overwrite if the component already exists in `lib-root`.
+  - `--fix-namespace`: Auto-prepend the registered library name to bare (unnamespaced) Footprint properties.
+
 ## Critical Schematic Routing & Placement Rules
 
 When performing routing or placement, you **MUST** follow these rules to avoid breaking connectivity, causing ERC errors, or failing validation:

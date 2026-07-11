@@ -313,6 +313,43 @@ def handle_snapshot(args):
             print(f"Warning: output file not found after export. kicad-cli stdout:\n{result.stdout}")
 
 
+def handle_fetch_easyeda(args):
+    import tempfile
+    import glob
+    import subprocess
+    from .fetch_easyeda import fetch_easyeda_component, restructure_to_kicadv6, import_fetched_component
+    from .import_lib import _resolve_table_scope
+
+    component_name = args.name or args.lcsc_id
+    lib_root = os.path.expanduser(args.lib_root)
+
+    with tempfile.TemporaryDirectory() as staging:
+        print(f"Fetching {args.lcsc_id} from EasyEDA...")
+        try:
+            raw_base = fetch_easyeda_component(args.lcsc_id, staging)
+        except FileNotFoundError:
+            print("Error: easyeda2kicad not found. Install with: pip install easyeda2kicad", file=sys.stderr)
+            sys.exit(1)
+        except subprocess.CalledProcessError:
+            # easyeda2kicad already printed its own error to stderr (inherited, not captured) —
+            # no extra wrapping, just a clean non-zero exit instead of a Python traceback.
+            sys.exit(1)
+
+        restructure_to_kicadv6(staging, raw_base, component_name)
+
+        table_dir, scope = _resolve_table_scope(args.project)
+
+        print(f"Importing {component_name} → {os.path.join(lib_root, component_name)}/KiCADv6/")
+        paths = import_fetched_component(
+            staging, component_name, lib_root, table_dir, scope,
+            force=args.force, fix_namespace=args.fix_namespace,
+        )
+
+        fp_count = len(glob.glob(os.path.join(paths['dest_fp_dir'], '*.kicad_mod')))
+        print(f"  symbol:    {os.path.basename(paths['dest_sym'])}")
+        print(f"  footprint: footprints.pretty/ ({fp_count} file(s))")
+
+
 def main():
     parser = argparse.ArgumentParser(description="KiCad Helper: Symbol Creator and Collision-Free Placement Tool")
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
@@ -416,6 +453,16 @@ def main():
     import_lib_parser.add_argument("--lib-root", default="~/hardwares/Libraries", help="Root directory for installed libraries (default: ~/hardwares/Libraries)")
     import_lib_parser.add_argument("--project", default=None, help="Path to .kicad_pro for project-level registration (default: global)")
     import_lib_parser.add_argument("--force", action="store_true", help="Overwrite if component already exists in lib-root")
+    import_lib_parser.add_argument("--fix-namespace", action="store_true", help="Auto-prepend the registered library name to bare (unnamespaced) Footprint properties in the copied .kicad_sym")
+
+    # fetch-easyeda parser
+    fetch_easyeda_parser = subparsers.add_parser("fetch-easyeda", help="Fetch a component from EasyEDA/LCSC via easyeda2kicad and import it into local library")
+    fetch_easyeda_parser.add_argument("lcsc_id", help="LCSC part number, e.g. C2040")
+    fetch_easyeda_parser.add_argument("--name", default=None, help="Component/library name override (default: lcsc_id)")
+    fetch_easyeda_parser.add_argument("--lib-root", default="~/hardwares/Libraries", help="Root directory for installed libraries (default: ~/hardwares/Libraries)")
+    fetch_easyeda_parser.add_argument("--project", default=None, help="Path to .kicad_pro for project-level registration (default: global)")
+    fetch_easyeda_parser.add_argument("--force", action="store_true", help="Overwrite if component already exists in lib-root")
+    fetch_easyeda_parser.add_argument("--fix-namespace", action="store_true", help="Auto-prepend the registered library name to bare (unnamespaced) Footprint properties")
 
     args = parser.parse_args()
 
@@ -461,6 +508,8 @@ def main():
     elif args.command == 'import-lib':
         from .import_lib import handle_import_lib
         handle_import_lib(args)
+    elif args.command == 'fetch-easyeda':
+        handle_fetch_easyeda(args)
     else:
         parser.print_help()
 
