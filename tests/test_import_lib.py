@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 import sys
 import os
 import tempfile
@@ -194,9 +195,10 @@ class TestResolveTableScope(unittest.TestCase):
             self.assertEqual(scope, 'project')
 
     def test_no_project_falls_back_to_global(self):
-        from kicad_skill.import_lib import _resolve_table_scope, _find_global_table_dir
-        table_dir, scope = _resolve_table_scope(None)
-        self.assertEqual(table_dir, _find_global_table_dir())
+        from kicad_skill.import_lib import _resolve_table_scope
+        with unittest.mock.patch('kicad_skill.import_lib._find_global_table_dir', return_value='/fake/global/dir'):
+            table_dir, scope = _resolve_table_scope(None)
+        self.assertEqual(table_dir, '/fake/global/dir')
         self.assertEqual(scope, 'global')
 
 
