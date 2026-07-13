@@ -464,6 +464,12 @@ def main():
     fetch_easyeda_parser.add_argument("--force", action="store_true", help="Overwrite if component already exists in lib-root")
     fetch_easyeda_parser.add_argument("--fix-namespace", action="store_true", help="Auto-prepend the registered library name to bare (unnamespaced) Footprint properties")
 
+    # render-netlist parser
+    render_netlist_parser = subparsers.add_parser("render-netlist", help="Render a schematic's flattened netlist to SVG via netlistsvg")
+    render_netlist_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    render_netlist_parser.add_argument("--output", required=True, help="Output .svg path")
+    render_netlist_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
+
     args = parser.parse_args()
 
     if args.command == "create-symbol":
@@ -510,6 +516,10 @@ def main():
         handle_import_lib(args)
     elif args.command == 'fetch-easyeda':
         handle_fetch_easyeda(args)
+    elif args.command == 'render-netlist':
+        from .netlist_svg import render_netlist_svg
+        render_netlist_svg(args.schematic, args.output, args.table)
+        print(f"Wrote {args.output}")
     else:
         parser.print_help()
 
