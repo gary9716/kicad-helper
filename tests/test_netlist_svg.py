@@ -31,6 +31,19 @@ class TestBuildYosysNetlist(unittest.TestCase):
         module = build_yosys_netlist(self.nets)["modules"]["top"]
         gt_names = {n["name"] for n in self.nets if len(n["pins"]) >= 2}
         self.assertEqual(set(module["netnames"].keys()), gt_names)
+        # netlistsvg draws module ports (not netnames) as visible text, so
+        # every named net must also be exposed as a module port
+        self.assertEqual(set(module["ports"].keys()), gt_names)
+        for name in gt_names:
+            self.assertEqual(module["ports"][name]["bits"],
+                             module["netnames"][name]["bits"])
+
+    def test_cell_type_is_ref_for_visible_box_label(self):
+        # netlistsvg renders the cell TYPE as the box label; "generic" would
+        # label every box "generic"
+        module = build_yosys_netlist(self.nets)["modules"]["top"]
+        for ref, cell in module["cells"].items():
+            self.assertEqual(cell["type"], ref)
 
     def test_single_pin_nets_render_port_but_no_netname(self):
         nets = [{"name": "SIG", "pins": ["U9:1", "U8:2"]},

@@ -18,6 +18,12 @@ def build_yosys_netlist(gt_nets):
 
     Netnames keyed by GT net name (duplicates uniquified with _2, _3, ...);
     single-pin nets contribute ports but no netname (dangling stub).
+
+    Visible-text quirks of netlistsvg (verified empirically): a cell's TYPE
+    string is what renders as its box label ("generic" would label every box
+    "generic"), so type = the component ref; "netnames" entries are NOT drawn
+    as text, so each named net is also exposed as a module port, which does
+    render its name.
     """
     cells = {}  # ref -> {number -> None}
     for net in gt_nets:
@@ -53,15 +59,18 @@ def build_yosys_netlist(gt_nets):
             pid = f"{ref}:{num}"
             connections[num] = [bit_by_pid[pid]] if pid in bit_by_pid else []
         cell_json[ref] = {
-            "type": "generic",
+            "type": ref,
             "port_directions": port_directions,
             "connections": connections,
         }
 
+    module_ports = {name: {"direction": "input", "bits": nn["bits"]}
+                    for name, nn in netnames.items()}
+
     return {
         "modules": {
             "top": {
-                "ports": {},
+                "ports": module_ports,
                 "cells": cell_json,
                 "netnames": netnames,
             }
