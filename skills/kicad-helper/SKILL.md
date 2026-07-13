@@ -123,6 +123,25 @@ Flattens a schematic's actual connectivity (same logic `check-netlist` uses) and
   - `--table`: Path to `sym-lib-table` (default: same folder as schematic).
 * **Scope limits:** hierarchy is flattened into one diagram; assumes globally-unique component refs across the whole hierarchy; first run needs network access (`npx` fetches `netlistsvg` on demand, cached after).
 
+### 9. ELK Auto-Layout (`elk-layout`)
+Re-places and re-routes an entire schematic sheet using the ELK layered algorithm (via elkjs): globally-optimized component placement plus orthogonal wire routing, with pins fixed in place (`FIXED_POS`). Power nets and high-fanout nets become net labels; 2-3 pin signal nets are routed as wires. Replaces the manual `place` + `connect` + `resolve` flow for whole-sheet layout.
+
+One-time setup (needs network): `npm install --prefix tools/` (from the kicad-helper repo root).
+
+```bash
+/Users/ktchou/kicad-helper/kicad-helper elk-layout \
+  --schematic "path/to/schematic.kicad_sch" \
+  --output "path/to/layouted.kicad_sch"
+```
+* **Arguments:**
+  - `--schematic`: Path to the `.kicad_sch` file.
+  - `--table`: Path to `sym-lib-table` (default: same folder as schematic).
+  - `--output`: Output path (default: overwrite input).
+  - `--fanout-threshold`: Nets with >= this many pins become labels (default: 4).
+  - `--dry-run`: Print the layout plan without writing.
+* **Also:** the library API `regenerate_schematic(gt_path, table, out, routing="elk")` regenerates from a ground-truth netlist and lays out via ELK (no CLI subcommand).
+* **Scope limits:** one sheet per run (no hierarchical multi-sheet layout); symbols keep their input rotation; no symmetry/grouping constraints yet; existing local labels/wires/junctions on the sheet are rebuilt (global labels preserved); requires `node` + one-time `npm install --prefix tools/`.
+
 ## Critical Schematic Routing & Placement Rules
 
 When performing routing or placement, you **MUST** follow these rules to avoid breaking connectivity, causing ERC errors, or failing validation:
