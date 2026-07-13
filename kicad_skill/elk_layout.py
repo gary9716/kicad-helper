@@ -114,12 +114,15 @@ def build_elk_graph(symbols, edge_nets):
 
     edges = []
     for i, (name, pins) in enumerate(edge_nets):
+        # ELK layered rejects hyperedges ("Passed edge is not 'simple'"):
+        # split each net into a star of simple 2-pin edges from one hub pin.
         ordered = sorted(pins)
-        edges.append({
-            "id": f"e{i}_{name}",
-            "sources": [ordered[0]],
-            "targets": ordered[1:],
-        })
+        for j, target in enumerate(ordered[1:]):
+            edges.append({
+                "id": f"e{i}_{j}_{name}",
+                "sources": [ordered[0]],
+                "targets": [target],
+            })
 
     return {
         "id": "root",
@@ -204,6 +207,7 @@ def derive_wires(elk_edges, moved_pins):
                                                + (moved_pins[pid][1] - sy) ** 2)
 
     segments = []
+    seen = set()
     for edge in elk_edges:
         pin_ids = list(edge["sources"]) + list(edge["targets"])
         for section in edge.get("sections", []):
@@ -215,7 +219,11 @@ def derive_wires(elk_edges, moved_pins):
             pts.append(moved_pins[end_pid])
             pts = _orthogonalize(pts)
             for a, b in zip(pts, pts[1:]):
-                if a != b:
+                # star-split edges of one net share the hub pin, so their
+                # initial runs coincide — drop exact duplicate segments
+                key = frozenset((a, b))
+                if a != b and key not in seen:
+                    seen.add(key)
                     segments.append((a, b))
     return segments
 
@@ -235,8 +243,66 @@ import uuid as _uuid
 from .parser import parse_sexpr, format_sexpr
 from .resolve_layout import _extract_symbols, _move_symbol
 from .netlist_eval import extract_actual_netlist, compare
-from .regenerate import _make_label, _label_orientation
+from .regenerate import _make_label
 from .schematic import load_sym_lib_table
+
+
+# Label footprint model (matches evaluate_layout's LABEL-OVERLAP check):
+# height 3.81mm, width ~ chars*1.5 + 3mm, extending right/up/left/down for
+# angle 0/90/180/270. Adjacent pins of one high-fanout net (2.54mm pitch)
+# always collide at a shared angle, so orientation must be chosen per label.
+_LABEL_H, _LABEL_CHAR_W, _LABEL_BASE_W = 3.81, 1.5, 3.0
+_JUSTIFY = {0: "left", 90: "left", 180: "right", 270: "right"}
+
+
+def _label_bbox(x, y, angle, name):
+    w, h = len(name) * _LABEL_CHAR_W + _LABEL_BASE_W, _LABEL_H
+    if angle == 0:
+        return (x, y - h / 2, x + w, y + h / 2)
+    if angle == 180:
+        return (x - w, y - h / 2, x, y + h / 2)
+    if angle == 90:   # extends up (y decreasing)
+        return (x - h / 2, y - w, x + h / 2, y)
+    return (x - h / 2, y, x + h / 2, y + w)  # 270: extends down
+
+
+def _overlap_area(b1, b2):
+    xo = min(b1[2], b2[2]) - max(b1[0], b2[0])
+    yo = min(b1[3], b2[3]) - max(b1[1], b2[1])
+    return xo * yo if xo > 0 and yo > 0 else 0.0
+
+
+def _place_labels(label_nets, moved_pins, centers):
+    """Yield (name, x, y, angle, justify) per labeled pin, greedily rotating
+    each label to the first orientation that doesn't collide (>2mm² overlap,
+    the evaluator's threshold) with labels already placed. Preference order
+    starts pointing away from the symbol body."""
+    placed = []
+    out = []
+    for name, pins in sorted(label_nets):
+        for pid in sorted(pins):
+            x, y = moved_pins[pid]
+            cx, cy = centers.get(pid.split(":")[0], (x, y))
+            dx, dy = x - cx, y - cy
+            if abs(dx) >= abs(dy):
+                outward = 0 if dx >= 0 else 180
+            else:
+                outward = 90 if dy < 0 else 270  # KiCad y grows downward
+            candidates = [outward, (outward + 90) % 360,
+                          (outward + 270) % 360, (outward + 180) % 360]
+            best = None  # (max_overlap, angle, bbox)
+            for angle in candidates:
+                bbox = _label_bbox(x, y, angle, name)
+                worst = max((_overlap_area(bbox, p) for p in placed), default=0.0)
+                if worst <= 2.0:
+                    best = (worst, angle, bbox)
+                    break
+                if best is None or worst < best[0]:
+                    best = (worst, angle, bbox)
+            _, angle, bbox = best
+            placed.append(bbox)
+            out.append((name, x, y, angle, _JUSTIFY[angle]))
+    return out
 
 
 def _make_wire(a, b):
@@ -315,11 +381,15 @@ def elk_layout_schematic(sch_path, table_path=None, out_path=None,
     routed, unrouted = [], []
     for edge in layouted.get("edges", []):
         (routed if edge.get("sections") else unrouted).append(edge)
-    edge_by_id = {f"e{i}_{name}": (name, pins)
-                  for i, (name, pins) in enumerate(edge_nets)}
+    edge_by_id = {f"e{i}_{j}_{name}": (name, pins)
+                  for i, (name, pins) in enumerate(edge_nets)
+                  for j in range(max(len(pins) - 1, 0))}
+    fallback_named = set()
     for edge in unrouted:
-        if edge["id"] in edge_by_id:
-            label_nets.append(edge_by_id[edge["id"]])
+        net = edge_by_id.get(edge["id"])
+        if net and net[0] not in fallback_named:
+            fallback_named.add(net[0])
+            label_nets.append(net)
     segments = derive_wires(routed, moved_pins)
     junctions = find_junctions(segments)
 
@@ -329,12 +399,8 @@ def elk_layout_schematic(sch_path, table_path=None, out_path=None,
 
     centers = {s["ref"]: ((s["bbox"].xmin + s["bbox"].xmax) / 2,
                           (s["bbox"].ymin + s["bbox"].ymax) / 2) for s in symbols}
-    for name, pins in label_nets:
-        for pid in sorted(pins):
-            x, y = moved_pins[pid]
-            cx, cy = centers.get(pid.split(":")[0], (x, y))
-            angle, justify = _label_orientation(x, y, cx, cy)
-            sch.append(_make_label(name, x, y, angle, justify))
+    for name, x, y, angle, justify in _place_labels(label_nets, moved_pins, centers):
+        sch.append(_make_label(name, x, y, angle, justify))
     for a, b in segments:
         sch.append(_make_wire(a, b))
     for pt in junctions:

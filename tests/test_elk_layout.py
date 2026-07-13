@@ -335,5 +335,56 @@ class TestRegenerateElkMode(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+import shutil as _shutil
+
+_TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+_HAS_ELKJS = (_shutil.which("node") is not None
+              and os.path.isdir(os.path.join(_TOOLS, "node_modules", "elkjs")))
+
+
+@unittest.skipUnless(_HAS_ELKJS, "node + tools/node_modules/elkjs required (npm install --prefix tools/)")
+class TestElkIntegration(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        for fname in os.listdir(FIXTURE):
+            shutil.copy(os.path.join(FIXTURE, fname), self.tmp)
+        self.sch = os.path.join(self.tmp, "mcp_test.kicad_sch")
+        self.table = os.path.join(self.tmp, "sym-lib-table")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_full_gate_on_can_node(self):
+        from kicad_skill.elk_layout import elk_layout_schematic
+        from kicad_skill.erc import find_kicad_cli, run_erc
+        from kicad_skill.evaluate_layout import evaluate_schematic_layout
+
+        # baseline score of the fixture as-is (current-pipeline output)
+        baseline = evaluate_schematic_layout(self.sch, self.table)
+
+        rep = elk_layout_schematic(self.sch, self.table)
+
+        # Gate 1: connectivity preserved
+        self.assertTrue(rep["ok"], rep)
+
+        # Gate 2: ERC clean of LAYOUT-class violations (when kicad-cli present).
+        # The can_node fixture is deliberately shorted (VDD/GND merged), so it
+        # reports pre-existing electrical errors (e.g. pin_to_pin power-output
+        # conflicts) that predate layout. Only violations the layout step could
+        # have introduced gate here.
+        if find_kicad_cli():
+            erc = run_erc(self.sch)
+            layout_classes = {"wire_dangling", "label_dangling", "pin_not_connected"}
+            layout_violations = [v for v in erc["violations"]
+                                 if v.get("type") in layout_classes]
+            self.assertEqual(layout_violations, [])
+
+        # Gate 3: quality — not worse than the input layout
+        after = evaluate_schematic_layout(self.sch, self.table)
+        self.assertFalse(after["fatal"], after)
+        self.assertGreaterEqual(after["score"], baseline["score"],
+                                f"ELK {after['score']} < baseline {baseline['score']}")
+
+
 if __name__ == "__main__":
     unittest.main()
