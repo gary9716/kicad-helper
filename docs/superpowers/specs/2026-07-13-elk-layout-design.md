@@ -31,7 +31,7 @@ kicad-helper elk-layout --schematic X.kicad_sch [--table T] [--output Y.kicad_sc
 | `--fanout-threshold` | 4 | Nets with ≥ this many pins become labels, not routed wires |
 | `--dry-run` | false | Print placement/routing plan, write nothing |
 
-Plus: `regenerate --routing elk` — regenerate builds components/nets from ground-truth JSON, then delegates placement+routing to the same `elk_layout` core instead of its current place/A* path. Existing `--routing auto|labels|wires` modes untouched.
+Plus: ELK-backed regeneration via the library API `regenerate_schematic(..., routing="elk")` (there is no `regenerate` CLI subcommand) — it builds components/nets from ground-truth JSON, then delegates placement+routing to the same `elk_layout` core instead of its current place/A* path. Existing `routing="auto"|"labels"|"wires"` modes untouched.
 
 Old `place` / `connect` / `resolve` subcommands stay untouched (legacy) until ELK is proven on real projects; deprecation is a later, separate decision.
 
@@ -70,7 +70,7 @@ Mapping (mm units throughout — ELK is unitless):
 |---|---|
 | Symbol instance `U1` | `children[]` node: `id: "U1"`, `width`/`height` from rotated bbox, `layoutOptions: {portConstraints: "FIXED_POS"}` |
 | Pin | `ports[]`: `id: "U1:5"`, `x`/`y` relative to node origin (post-rotation), `layoutOptions: {"port.side": "WEST"\|"EAST"\|"NORTH"\|"SOUTH"}` |
-| 2-3 pin net | `edges[]`: `id`, `sources: ["U1:5"]`, `targets: ["R1:1", ...]` |
+| 2-3 pin net | `edges[]` — star-split into simple 2-pin edges from one hub pin (`sources: ["U1:5"]`, `targets: ["R1:1"]`), because ELK layered rejects multi-target hyperedges ("Passed edge is not 'simple'"). Duplicate wire segments from star edges sharing the hub run are deduped at write-back. |
 
 Root `layoutOptions`:
 - `algorithm: "layered"`
@@ -90,8 +90,9 @@ ELK never rotates nodes; each symbol keeps its existing `angle`, bbox and pin of
 ### Stage 5 — Write-back
 
 - Update each moved symbol's `(at x y angle)`.
-- Delete ALL existing `wire` elements on the sheet (full re-route; `--dry-run` for safety preview). Existing labels on classified nets kept if name matches, else re-emitted via `regenerate._make_label` / `_label_orientation` at each labeled pin.
+- Delete ALL existing `wire`, `junction`, and local `label` elements on the sheet (full re-route; `--dry-run` for safety preview). Labels are then re-emitted via `regenerate._make_label` / `_label_orientation`: label-nets get a label at EVERY pin; edge-nets whose name came from a user label (non-synthesized, i.e. not `NET_*` invented by `name_nets`) get one label at their first (sorted) pin so the user's net name survives the re-route.
 - Emit new wires, labels, junctions. S-expression editing follows existing `schematic.py` patterns.
+- Output is written to a temp file in the same directory (`<out>.elk_tmp`) and the connectivity gate runs against it; only on gate pass is it renamed onto the output path. On gate failure the input is left untouched and the rejected layout is kept at `report["rejected_file"]` for inspection.
 
 ## Best-practice rules mapping (review of old rules)
 
