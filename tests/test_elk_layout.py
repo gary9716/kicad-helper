@@ -80,5 +80,56 @@ class TestNameNets(unittest.TestCase):
         self.assertTrue(synth.startswith("NET_"))
 
 
+from kicad_skill.elk_layout import build_elk_graph
+
+
+class TestBuildElkGraph(unittest.TestCase):
+    def test_graph_structure_from_fixture(self):
+        _, symbols = load_fixture_symbols()
+        edge_nets = [("TXCAN", {"U2:1", "U3:1"})]
+        graph = build_elk_graph(symbols, edge_nets)
+
+        self.assertEqual(graph["layoutOptions"]["elk.algorithm"], "layered")
+        self.assertEqual(graph["layoutOptions"]["elk.direction"], "RIGHT")
+        self.assertEqual(graph["layoutOptions"]["elk.edgeRouting"], "ORTHOGONAL")
+
+        nodes = {n["id"]: n for n in graph["children"]}
+        self.assertEqual(set(nodes), {s["ref"] for s in symbols})
+
+        u2 = nodes["U2"]
+        self.assertEqual(u2["layoutOptions"]["elk.portConstraints"], "FIXED_POS")
+        self.assertGreater(u2["width"], 0)
+        self.assertGreater(u2["height"], 0)
+        ports = {p["id"]: p for p in u2["ports"]}
+        self.assertIn("U2:1", ports)
+        p = ports["U2:1"]
+        # port coords are relative to node origin (bbox min corner), inside node
+        self.assertGreaterEqual(p["x"], 0)
+        self.assertLessEqual(p["x"], u2["width"])
+        self.assertIn(p["layoutOptions"]["elk.port.side"],
+                      ("WEST", "EAST", "NORTH", "SOUTH"))
+
+        self.assertEqual(len(graph["edges"]), 1)
+        e = graph["edges"][0]
+        self.assertEqual(set(e["sources"] + e["targets"]), {"U2:1", "U3:1"})
+
+    def test_port_side_matches_pin_position(self):
+        _, symbols = load_fixture_symbols()
+        graph = build_elk_graph(symbols, [])
+        by_ref = {s["ref"]: s for s in symbols}
+        for node in graph["children"]:
+            sym = by_ref[node["id"]]
+            b = sym["bbox"]
+            for port in node["ports"]:
+                pin = next(p for p in sym["pins"]
+                           if f'{sym["ref"]}:{p["number"]}' == port["id"])
+                dists = {
+                    "WEST": pin["x"] - b.xmin, "EAST": b.xmax - pin["x"],
+                    "NORTH": pin["y"] - b.ymin, "SOUTH": b.ymax - pin["y"],
+                }
+                self.assertEqual(port["layoutOptions"]["elk.port.side"],
+                                 min(dists, key=dists.get))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -65,3 +65,66 @@ def collect_labels_at(sch_sexpr):
             if at is not None:
                 out[(float(at[1]), float(at[2]))] = child[1]
     return out
+
+
+def _port_side(pin_x, pin_y, bbox):
+    """Closest bbox edge wins. KiCad y grows downward, same as ELK: the
+    bbox ymin edge is the visual top -> NORTH."""
+    dists = {
+        "WEST": pin_x - bbox.xmin,
+        "EAST": bbox.xmax - pin_x,
+        "NORTH": pin_y - bbox.ymin,
+        "SOUTH": bbox.ymax - pin_y,
+    }
+    return min(dists, key=dists.get)
+
+
+def build_elk_graph(symbols, edge_nets):
+    """symbols: _extract_symbols output (with 'pins'). edge_nets: [(name, pins)].
+
+    Node origin = bbox min corner; ports relative to it; FIXED_POS so ELK
+    never moves a pin. Spacing values are mm (ELK is unitless).
+    """
+    children = []
+    for sym in symbols:
+        b = sym["bbox"]
+        ports = []
+        for p in sym["pins"]:
+            ports.append({
+                "id": f'{sym["ref"]}:{p["number"]}',
+                "x": p["x"] - b.xmin,
+                "y": p["y"] - b.ymin,
+                "width": 0.1,
+                "height": 0.1,
+                "layoutOptions": {"elk.port.side": _port_side(p["x"], p["y"], b)},
+            })
+        children.append({
+            "id": sym["ref"],
+            "width": b.xmax - b.xmin,
+            "height": b.ymax - b.ymin,
+            "ports": ports,
+            "layoutOptions": {"elk.portConstraints": "FIXED_POS"},
+        })
+
+    edges = []
+    for i, (name, pins) in enumerate(edge_nets):
+        ordered = sorted(pins)
+        edges.append({
+            "id": f"e{i}_{name}",
+            "sources": [ordered[0]],
+            "targets": ordered[1:],
+        })
+
+    return {
+        "id": "root",
+        "layoutOptions": {
+            "elk.algorithm": "layered",
+            "elk.direction": "RIGHT",
+            "elk.edgeRouting": "ORTHOGONAL",
+            "elk.spacing.nodeNode": 5.08,
+            "elk.spacing.edgeNode": 2.54,
+            "elk.layered.spacing.nodeNodeBetweenLayers": 10.16,
+        },
+        "children": children,
+        "edges": edges,
+    }
