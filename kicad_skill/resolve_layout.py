@@ -195,6 +195,7 @@ def _extract_symbols(sch_sexpr, local_defs, lib_map, project_dir):
             'mirror_x': mirror_x, 'mirror_y': mirror_y,
             'local_bbox': local_bbox,
             'bbox': bbox,
+            'pins': pins,
             'pin_pts': pin_pts,
             'at_node': at_node,
             'prop_at_nodes': prop_at_nodes,
