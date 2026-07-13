@@ -31,7 +31,7 @@ The existing ground-truth netlist JSON used by `check-netlist` / `regenerate` / 
 }
 ```
 
-Only `nets[].name` and `nets[].pins` are consumed. `components` and all other keys ignored — cells are derived from the pins appearing in nets (a component with no pins in any net has nothing to draw). Loaded via `netlist_eval.load_ground_truth` if it validates the same shape, else plain `json.load` + minimal shape check (nets list with name/pins).
+Only `nets[].name` and `nets[].pins` are consumed. `components` and all other keys ignored — cells are derived from the pins appearing in nets (a component with no pins in any net has nothing to draw). Loaded via plain `json.load`; a missing/malformed `"nets"` key raises bare (KeyError), consistent with the module's documented error style and with `netlist_eval.load_ground_truth` (itself an unvalidated `json.load`).
 
 ## Changes
 

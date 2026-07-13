@@ -64,7 +64,7 @@ def build_yosys_netlist(gt_nets):
             "connections": connections,
         }
 
-    module_ports = {name: {"direction": "input", "bits": nn["bits"]}
+    module_ports = {name: {"direction": "input", "bits": list(nn["bits"])}
                     for name, nn in netnames.items()}
 
     return {
