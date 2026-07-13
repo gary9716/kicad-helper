@@ -79,6 +79,13 @@ class TestNameNets(unittest.TestCase):
         synth = by_pins[frozenset({"U2:1", "U3:1"})]
         self.assertTrue(synth.startswith("NET_"))
 
+    def test_synth_name_never_collides_with_existing_label(self):
+        nets = [{"U2:1", "U3:1"}]
+        pin_positions = {"U2:1": (0.0, 0.0), "U3:1": (2.54, 0.0)}
+        labels_at = {(99.0, 99.0): "NET_U2_1"}  # existing label with the synth name
+        named = name_nets(nets, pin_positions, labels_at)
+        self.assertNotEqual(named[0][0], "NET_U2_1")
+
 
 from kicad_skill.elk_layout import build_elk_graph
 
@@ -257,6 +264,33 @@ class TestElkLayoutSchematic(unittest.TestCase):
             for c in graph["children"]:
                 b = by_ref[c["id"]]["bbox"]
                 c["x"], c["y"] = b.xmin, b.ymin
+            for e in graph["edges"]:
+                e["sections"] = []
+            return graph
+        mock_elk.side_effect = fake_run
+
+        report = elk_layout_schematic(self.sch, self.table)
+        self.assertTrue(report["ok"], report)
+
+        after = {frozenset(n) for n in
+                 extract_actual_netlist(self.sch, self.table) if len(n) >= 2}
+        self.assertEqual(before, after)
+
+    @mock.patch("kicad_skill.elk_layout.run_elk")
+    def test_uniform_shift_preserves_connectivity(self, mock_elk):
+        """Nonzero deltas: pins must move with symbols (regression for the
+        stale-moved_pins bug — labels written at pre-move coords)."""
+        from kicad_skill.netlist_eval import extract_actual_netlist
+
+        before = {frozenset(n) for n in
+                  extract_actual_netlist(self.sch, self.table) if len(n) >= 2}
+
+        def fake_run(graph):
+            _, symbols = load_fixture_symbols()
+            by_ref = {s["ref"]: s for s in symbols}
+            for c in graph["children"]:
+                b = by_ref[c["id"]]["bbox"]
+                c["x"], c["y"] = b.xmin + 12.7, b.ymin + 12.7
             for e in graph["edges"]:
                 e["sections"] = []
             return graph

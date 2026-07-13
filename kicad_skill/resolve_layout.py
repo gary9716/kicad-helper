@@ -312,6 +312,9 @@ def _move_symbol(sym, dx, dy):
     b = sym['bbox']
     sym['bbox'] = BoundingBox(b.xmin + dx, b.ymin + dy, b.xmax + dx, b.ymax + dy)
     sym['pin_pts'] = [(px + dx, py + dy) for px, py in sym['pin_pts']]
+    for p in sym.get('pins', []):
+        p['x'] += dx
+        p['y'] += dy
 
     n = sym['at_node']
     n[1] = f'{sym["x"]:.3f}'

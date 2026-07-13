@@ -50,7 +50,13 @@ def name_nets(nets, pin_positions, labels_at):
                 name = labels_at[pos]
                 break
         if name is None:
-            name = "NET_" + sorted(net)[0].replace(":", "_")
+            base = "NET_" + sorted(net)[0].replace(":", "_")
+            name = base
+            taken = set(labels_at.values()) | {n for n, _ in named}
+            suffix = 1
+            while name in taken:
+                name = f"{base}_{suffix}"
+                suffix += 1
         named.append((name, net))
     return named
 
