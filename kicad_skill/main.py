@@ -544,6 +544,8 @@ def main():
                 print("Connectivity check: OK")
             else:
                 print(f"WARNING: connectivity changed! {rep['report']}")
+                print(f"Input left untouched; rejected layout kept at: "
+                      f"{rep['rejected_file']}")
                 sys.exit(1)
     else:
         parser.print_help()

@@ -39,9 +39,11 @@ def name_nets(nets, pin_positions, labels_at):
 
     A net whose any pin position carries an existing label uses that label's
     text; otherwise the name is synthesized from the first pin id (sorted),
-    e.g. NET_U2_1. Returns list of (name, pin_set).
+    e.g. NET_U2_1. Returns (list of (name, pin_set), set of synthesized names)
+    so callers can tell user-given names from invented ones.
     """
     named = []
+    synthesized = set()
     for net in nets:
         name = None
         for pid in sorted(net):
@@ -57,8 +59,9 @@ def name_nets(nets, pin_positions, labels_at):
             while name in taken:
                 name = f"{base}_{suffix}"
                 suffix += 1
+            synthesized.add(name)
         named.append((name, net))
-    return named
+    return named, synthesized
 
 
 def collect_labels_at(sch_sexpr):
@@ -243,7 +246,7 @@ import uuid as _uuid
 from .parser import parse_sexpr, format_sexpr
 from .resolve_layout import _extract_symbols, _move_symbol
 from .netlist_eval import extract_actual_netlist, compare
-from .regenerate import _make_label
+from .regenerate import _label_orientation, _make_label
 from .schematic import load_sym_lib_table
 
 
@@ -324,8 +327,9 @@ def elk_layout_schematic(sch_path, table_path=None, out_path=None,
     """Re-place and re-route one sheet via ELK. Returns a report dict.
 
     Gate: post-layout connectivity must equal pre-layout connectivity
-    (zero shorts/opens) — report["ok"] False otherwise (file still written
-    unless dry_run; caller decides severity).
+    (zero shorts/opens). The result is written to a temp file first and only
+    renamed onto out_path when the gate passes; on failure out_path is left
+    untouched and report["rejected_file"] points at the rejected layout.
     """
     if table_path is None:
         table_path = os.path.join(os.path.dirname(sch_path), "sym-lib-table")
@@ -351,7 +355,8 @@ def elk_layout_schematic(sch_path, table_path=None, out_path=None,
         for p in s["pins"]:
             pin_positions[f'{s["ref"]}:{p["number"]}'] = (p["x"], p["y"])
     labels_at = collect_labels_at(sch)
-    named = name_nets([n for n in raw_nets if len(n) >= 2], pin_positions, labels_at)
+    named, synthesized = name_nets(
+        [n for n in raw_nets if len(n) >= 2], pin_positions, labels_at)
     gt = [{"name": name, "pins": sorted(pins)} for name, pins in named]
 
     edge_nets, label_nets = classify_for_elk(named, fanout_threshold)
@@ -401,15 +406,37 @@ def elk_layout_schematic(sch_path, table_path=None, out_path=None,
                           (s["bbox"].ymin + s["bbox"].ymax) / 2) for s in symbols}
     for name, x, y, angle, justify in _place_labels(label_nets, moved_pins, centers):
         sch.append(_make_label(name, x, y, angle, justify))
+    # edge-nets routed as wires lose their label element in the strip above;
+    # re-emit user-given (non-synthesized) names at one pin so they survive
+    user_labels = 0
+    label_names = {n for n, _ in label_nets}
+    for name, pins in edge_nets:
+        if name in synthesized or name in label_names:
+            continue
+        pid = sorted(pins)[0]
+        x, y = moved_pins[pid]
+        cx, cy = centers.get(pid.split(":")[0], (x, y))
+        angle, justify = _label_orientation(x, y, cx, cy)
+        sch.append(_make_label(name, x, y, angle, justify))
+        user_labels += 1
     for a, b in segments:
         sch.append(_make_wire(a, b))
     for pt in junctions:
         sch.append(_make_junction(pt))
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    # write to a temp file in the SAME directory (sub-sheet paths resolve
+    # relative to the schematic) and gate before touching out_path
+    tmp_path = out_path + ".elk_tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         f.write(format_sexpr(sch))
 
-    rep = compare(extract_actual_netlist(out_path, table_path), gt)
-    return {"ok": not rep["fatal"], "report": rep, "deltas": deltas,
-            "wires": len(segments), "labels": sum(len(p) for _, p in label_nets),
-            "junctions": len(junctions)}
+    rep = compare(extract_actual_netlist(tmp_path, table_path), gt)
+    result = {"ok": not rep["fatal"], "report": rep, "deltas": deltas,
+              "wires": len(segments),
+              "labels": sum(len(p) for _, p in label_nets) + user_labels,
+              "junctions": len(junctions)}
+    if result["ok"]:
+        os.replace(tmp_path, out_path)
+    else:
+        result["rejected_file"] = tmp_path
+    return result

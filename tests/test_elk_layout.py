@@ -73,17 +73,20 @@ class TestNameNets(unittest.TestCase):
         }
         # labels_at: (x, y) -> name  (from existing label/global_label sexprs)
         labels_at = {(10.16, 20.32): "VDD"}
-        named = name_nets(nets, pin_positions, labels_at)
+        named, synthesized = name_nets(nets, pin_positions, labels_at)
         by_pins = {frozenset(p): n for n, p in named}
         self.assertEqual(by_pins[frozenset({"U1:5", "U2:18"})], "VDD")
         synth = by_pins[frozenset({"U2:1", "U3:1"})]
         self.assertTrue(synth.startswith("NET_"))
+        # provenance: only the invented name is reported as synthesized
+        self.assertEqual(synthesized, {synth})
+        self.assertNotIn("VDD", synthesized)
 
     def test_synth_name_never_collides_with_existing_label(self):
         nets = [{"U2:1", "U3:1"}]
         pin_positions = {"U2:1": (0.0, 0.0), "U3:1": (2.54, 0.0)}
         labels_at = {(99.0, 99.0): "NET_U2_1"}  # existing label with the synth name
-        named = name_nets(nets, pin_positions, labels_at)
+        named, _ = name_nets(nets, pin_positions, labels_at)
         self.assertNotEqual(named[0][0], "NET_U2_1")
 
 
@@ -302,6 +305,78 @@ class TestElkLayoutSchematic(unittest.TestCase):
         after = {frozenset(n) for n in
                  extract_actual_netlist(self.sch, self.table) if len(n) >= 2}
         self.assertEqual(before, after)
+
+    @mock.patch("kicad_skill.elk_layout.run_elk")
+    def test_user_label_on_edge_net_is_preserved(self, mock_elk):
+        """A user label naming a 2-pin (edge) net must survive re-layout even
+        when the net is routed as a wire: the old label is stripped with all
+        wires, so the layouter has to re-emit it."""
+        from kicad_skill.parser import parse_sexpr, format_sexpr
+        from kicad_skill.regenerate import _make_label
+
+        # give the U2:1/U3:1 edge net a user label "TXCAN" at pin U2:1
+        with open(self.sch, encoding="utf-8") as f:
+            sch = parse_sexpr(f.read())
+        sch.append(_make_label("TXCAN", 139.7, 92.71))
+        with open(self.sch, "w", encoding="utf-8") as f:
+            f.write(format_sexpr(sch))
+
+        def fake_run(graph):
+            # echo each node at its current origin; route ONLY the TXCAN edge
+            # (bend at (139.7, 105.41) touches no other pin), so it becomes a
+            # wire instead of falling back to labels
+            _, symbols = load_fixture_symbols()
+            by_ref = {s["ref"]: s for s in symbols}
+            for c in graph["children"]:
+                b = by_ref[c["id"]]["bbox"]
+                c["x"], c["y"] = b.xmin, b.ymin
+            for e in graph["edges"]:
+                if e["id"].endswith("_TXCAN"):
+                    e["sections"] = [{
+                        "startPoint": {"x": 139.7, "y": 92.71},
+                        "endPoint": {"x": 168.91, "y": 105.41},
+                        "bendPoints": [{"x": 139.7, "y": 105.41}],
+                    }]
+                else:
+                    e["sections"] = []
+            return graph
+        mock_elk.side_effect = fake_run
+
+        report = elk_layout_schematic(self.sch, self.table)
+        self.assertTrue(report["ok"], report)
+
+        with open(self.sch, encoding="utf-8") as f:
+            out = parse_sexpr(f.read())
+        label_texts = {c[1] for c in out
+                       if isinstance(c, list) and c and c[0] == "label"}
+        self.assertIn("TXCAN", label_texts)
+
+    @mock.patch("kicad_skill.elk_layout.run_elk")
+    def test_gate_failure_leaves_input_untouched(self, mock_elk):
+        """Stacking every node at (0,0) makes pins coincide -> shorts -> gate
+        failure. The input file must stay byte-identical; the rejected layout
+        must be kept on disk for inspection."""
+        import hashlib
+
+        def stack_all(graph):
+            for c in graph["children"]:
+                c["x"], c["y"] = 0.0, 0.0
+            for e in graph["edges"]:
+                e["sections"] = []
+            return graph
+        mock_elk.side_effect = stack_all
+
+        with open(self.sch, "rb") as f:
+            before = hashlib.sha256(f.read()).hexdigest()
+
+        report = elk_layout_schematic(self.sch, self.table)
+        self.assertFalse(report["ok"], report)
+
+        with open(self.sch, "rb") as f:
+            after = hashlib.sha256(f.read()).hexdigest()
+        self.assertEqual(before, after, "gate failure modified the input file")
+        self.assertIn("rejected_file", report)
+        self.assertTrue(os.path.exists(report["rejected_file"]))
 
 
 class TestRegenerateElkMode(unittest.TestCase):
