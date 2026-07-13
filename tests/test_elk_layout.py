@@ -42,5 +42,23 @@ class TestExtractSymbolsPins(unittest.TestCase):
         )
 
 
+from kicad_skill.elk_layout import classify_for_elk
+
+
+class TestClassifyForElk(unittest.TestCase):
+    def test_power_fanout_and_singleton_rules(self):
+        nets = [
+            ("VDD", {"U1:5", "U2:18", "C3:1"}),      # power name -> label
+            ("GND_A", {"U1:6", "C3:2"}),              # startswith GND -> label
+            ("SPI_SCK", {"U1:4", "U2:13", "U3:1", "J1:2"}),  # fanout 4 -> label
+            ("TXCAN", {"U2:1", "U3:1"}),              # 2-pin signal -> edge
+            ("OSC1", {"U2:8", "Y1:1", "C1:1"}),       # 3-pin signal -> edge
+            ("NC_PIN", {"U2:11"}),                    # singleton -> neither
+        ]
+        edge_nets, label_nets = classify_for_elk(nets, fanout_threshold=4)
+        self.assertEqual({n for n, _ in edge_nets}, {"TXCAN", "OSC1"})
+        self.assertEqual({n for n, _ in label_nets}, {"VDD", "GND_A", "SPI_SCK"})
+
+
 if __name__ == "__main__":
     unittest.main()
