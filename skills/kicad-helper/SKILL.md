@@ -110,6 +110,19 @@ Fetches a component (symbol, footprint, and 3D model) from EasyEDA/LCSC via the 
   - `--force`: Overwrite if the component already exists in `lib-root`.
   - `--fix-namespace`: Auto-prepend the registered library name to bare (unnamespaced) Footprint properties.
 
+### 8. Render Netlist to SVG (`render-netlist`)
+Flattens a schematic's actual connectivity (same logic `check-netlist` uses) and renders it as an SVG via [netlistsvg](https://github.com/nturley/netlistsvg). Each component becomes a generic labeled box with one port per pin (numbered); each electrical net becomes a wire. This is a connectivity diagram for debugging/docs, not a real schematic — no R/C/U symbol art.
+```bash
+/Users/ktchou/kicad-helper/kicad-helper render-netlist \
+  --schematic "path/to/schematic.kicad_sch" \
+  --output "netlist.svg"
+```
+* **Arguments:**
+  - `--schematic`: Path to the `.kicad_sch` file.
+  - `--output`: Output `.svg` path.
+  - `--table`: Path to `sym-lib-table` (default: same folder as schematic).
+* **Scope limits:** hierarchy is flattened into one diagram; assumes globally-unique component refs across the whole hierarchy; first run needs network access (`npx` fetches `netlistsvg` on demand, cached after).
+
 ## Critical Schematic Routing & Placement Rules
 
 When performing routing or placement, you **MUST** follow these rules to avoid breaking connectivity, causing ERC errors, or failing validation:
