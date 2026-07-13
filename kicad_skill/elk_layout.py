@@ -32,3 +32,36 @@ def classify_for_elk(nets, fanout_threshold=4):
         else:
             edge_nets.append((name, pins))
     return edge_nets, label_nets
+
+
+def name_nets(nets, pin_positions, labels_at):
+    """Attach a name to each anonymous pin-set net.
+
+    A net whose any pin position carries an existing label uses that label's
+    text; otherwise the name is synthesized from the first pin id (sorted),
+    e.g. NET_U2_1. Returns list of (name, pin_set).
+    """
+    named = []
+    for net in nets:
+        name = None
+        for pid in sorted(net):
+            pos = pin_positions.get(pid)
+            if pos is not None and pos in labels_at:
+                name = labels_at[pos]
+                break
+        if name is None:
+            name = "NET_" + sorted(net)[0].replace(":", "_")
+        named.append((name, net))
+    return named
+
+
+def collect_labels_at(sch_sexpr):
+    """{(x, y): label_text} for every label/global_label in the sheet."""
+    out = {}
+    for child in sch_sexpr[1:]:
+        if isinstance(child, list) and child and child[0] in ("label", "global_label"):
+            at = next((s for s in child[1:]
+                       if isinstance(s, list) and s[0] == "at" and len(s) > 2), None)
+            if at is not None:
+                out[(float(at[1]), float(at[2]))] = child[1]
+    return out

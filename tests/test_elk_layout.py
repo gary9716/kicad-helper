@@ -60,5 +60,25 @@ class TestClassifyForElk(unittest.TestCase):
         self.assertEqual({n for n, _ in label_nets}, {"VDD", "GND_A", "SPI_SCK"})
 
 
+from kicad_skill.elk_layout import name_nets
+
+
+class TestNameNets(unittest.TestCase):
+    def test_label_name_wins_else_synthesized(self):
+        nets = [{"U1:5", "U2:18"}, {"U2:1", "U3:1"}]
+        # pin_positions: pin id -> (x, y)
+        pin_positions = {
+            "U1:5": (10.16, 20.32), "U2:18": (50.8, 20.32),
+            "U2:1": (50.8, 30.48), "U3:1": (90.17, 30.48),
+        }
+        # labels_at: (x, y) -> name  (from existing label/global_label sexprs)
+        labels_at = {(10.16, 20.32): "VDD"}
+        named = name_nets(nets, pin_positions, labels_at)
+        by_pins = {frozenset(p): n for n, p in named}
+        self.assertEqual(by_pins[frozenset({"U1:5", "U2:18"})], "VDD")
+        synth = by_pins[frozenset({"U2:1", "U3:1"})]
+        self.assertTrue(synth.startswith("NET_"))
+
+
 if __name__ == "__main__":
     unittest.main()
