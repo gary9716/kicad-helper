@@ -465,10 +465,9 @@ def main():
     fetch_easyeda_parser.add_argument("--fix-namespace", action="store_true", help="Auto-prepend the registered library name to bare (unnamespaced) Footprint properties")
 
     # render-netlist parser
-    render_netlist_parser = subparsers.add_parser("render-netlist", help="Render a schematic's flattened netlist to SVG via netlistsvg")
-    render_netlist_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    render_netlist_parser = subparsers.add_parser("render-netlist", help="Render a ground-truth netlist JSON to SVG via netlistsvg")
+    render_netlist_parser.add_argument("--netlist", required=True, help="Path to the ground-truth netlist JSON")
     render_netlist_parser.add_argument("--output", required=True, help="Output .svg path")
-    render_netlist_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
 
     # elk-layout parser
     elk_parser = subparsers.add_parser("elk-layout", help="Re-place and re-route a schematic via ELK (elkjs) auto-layout")
@@ -526,7 +525,7 @@ def main():
         handle_fetch_easyeda(args)
     elif args.command == 'render-netlist':
         from .netlist_svg import render_netlist_svg
-        render_netlist_svg(args.schematic, args.output, args.table)
+        render_netlist_svg(args.netlist, args.output)
         print(f"Wrote {args.output}")
     elif args.command == 'elk-layout':
         from .elk_layout import elk_layout_schematic

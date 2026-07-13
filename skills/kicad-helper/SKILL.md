@@ -111,17 +111,16 @@ Fetches a component (symbol, footprint, and 3D model) from EasyEDA/LCSC via the 
   - `--fix-namespace`: Auto-prepend the registered library name to bare (unnamespaced) Footprint properties.
 
 ### 8. Render Netlist to SVG (`render-netlist`)
-Flattens a schematic's actual connectivity (same logic `check-netlist` uses) and renders it as an SVG via [netlistsvg](https://github.com/nturley/netlistsvg). Each component becomes a generic labeled box with one port per pin (numbered); each electrical net becomes a wire. This is a connectivity diagram for debugging/docs, not a real schematic — no R/C/U symbol art.
+Renders a ground-truth netlist JSON (the format used by `check-netlist` and the `plan-ground-truth-netlist` skill) as an SVG connectivity diagram via [netlistsvg](https://github.com/nturley/netlistsvg). Each component becomes a generic labeled box with one port per pin; each net with 2+ pins becomes a wire labeled with its net name. Connectivity diagram for debugging/docs, not a real schematic.
 ```bash
 /Users/ktchou/kicad-helper/kicad-helper render-netlist \
-  --schematic "path/to/schematic.kicad_sch" \
+  --netlist "path/to/design.groundtruth.json" \
   --output "netlist.svg"
 ```
 * **Arguments:**
-  - `--schematic`: Path to the `.kicad_sch` file.
+  - `--netlist`: Path to the ground-truth netlist JSON.
   - `--output`: Output `.svg` path.
-  - `--table`: Path to `sym-lib-table` (default: same folder as schematic).
-* **Scope limits:** hierarchy is flattened into one diagram; assumes globally-unique component refs across the whole hierarchy; first run needs network access (`npx` fetches `netlistsvg` on demand, cached after).
+* **Note:** only have a schematic? Build the GT JSON first via the `plan-ground-truth-netlist` skill. First run needs network (`npx` fetches `netlistsvg`, cached after).
 
 ### 9. ELK Auto-Layout (`elk-layout`)
 Re-places and re-routes an entire schematic sheet using the ELK layered algorithm (via elkjs): globally-optimized component placement plus orthogonal wire routing, with pins fixed in place (`FIXED_POS`). Power nets and high-fanout nets become net labels; 2-3 pin signal nets are routed as wires. Replaces the manual `place` + `connect` + `resolve` flow for whole-sheet layout.
