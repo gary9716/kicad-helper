@@ -470,6 +470,14 @@ def main():
     render_netlist_parser.add_argument("--output", required=True, help="Output .svg path")
     render_netlist_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
 
+    # elk-layout parser
+    elk_parser = subparsers.add_parser("elk-layout", help="Re-place and re-route a schematic via ELK (elkjs) auto-layout")
+    elk_parser.add_argument("--schematic", required=True, help="Path to the KiCad schematic (.kicad_sch) file")
+    elk_parser.add_argument("--table", help="Path to sym-lib-table (default: same folder as schematic)")
+    elk_parser.add_argument("--output", help="Output schematic path (default: overwrite input)")
+    elk_parser.add_argument("--fanout-threshold", type=int, default=4, help="Nets with >= this many pins become labels instead of routed wires (default: 4)")
+    elk_parser.add_argument("--dry-run", action="store_true", help="Print layout plan without writing")
+
     args = parser.parse_args()
 
     if args.command == "create-symbol":
@@ -520,6 +528,23 @@ def main():
         from .netlist_svg import render_netlist_svg
         render_netlist_svg(args.schematic, args.output, args.table)
         print(f"Wrote {args.output}")
+    elif args.command == 'elk-layout':
+        from .elk_layout import elk_layout_schematic
+        rep = elk_layout_schematic(
+            args.schematic, args.table, out_path=args.output,
+            fanout_threshold=args.fanout_threshold, dry_run=args.dry_run)
+        if rep.get("dry_run"):
+            print(f"Deltas: {len(rep['deltas'])} symbols")
+            print(f"Wire nets:  {', '.join(rep['edge_nets']) or '(none)'}")
+            print(f"Label nets: {', '.join(rep['label_nets']) or '(none)'}")
+        else:
+            print(f"Moved {len(rep['deltas'])} symbols, {rep['wires']} wire segments, "
+                  f"{rep['labels']} labels, {rep['junctions']} junctions")
+            if rep["ok"]:
+                print("Connectivity check: OK")
+            else:
+                print(f"WARNING: connectivity changed! {rep['report']}")
+                sys.exit(1)
     else:
         parser.print_help()
 
