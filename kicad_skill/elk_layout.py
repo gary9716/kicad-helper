@@ -147,3 +147,78 @@ def run_elk(graph):
         capture_output=True, text=True, check=True,
     )
     return json.loads(proc.stdout)
+
+
+def _snap(v):
+    return round(v / GRID) * GRID
+
+
+def snap_deltas(layouted, symbols):
+    """{ref: (dx, dy)} — grid-snapped translation for each symbol.
+
+    ELK node origin corresponds to the symbol's bbox min corner. Snapping the
+    DELTA (not the absolute position) preserves every intra-symbol alignment:
+    pins that were on-grid stay on-grid.
+    """
+    by_ref = {s["ref"]: s for s in symbols}
+    deltas = {}
+    for node in layouted.get("children", []):
+        sym = by_ref.get(node["id"])
+        if sym is None:
+            continue
+        b = sym["bbox"]
+        deltas[node["id"]] = (_snap(node["x"] - b.xmin), _snap(node["y"] - b.ymin))
+    return deltas
+
+
+def _orthogonalize(points):
+    """Insert an L-jog wherever two consecutive points differ in both axes."""
+    out = [points[0]]
+    for pt in points[1:]:
+        px, py = out[-1]
+        x, y = pt
+        if px != x and py != y:
+            out.append((x, py))
+        if (x, y) != out[-1]:
+            out.append((x, y))
+    return out
+
+
+def derive_wires(elk_edges, moved_pins):
+    """ELK edge sections -> KiCad wire segments [( (x1,y1), (x2,y2) ), ...].
+
+    Endpoints are authoritative snapped pin positions (never ELK's floats);
+    bend points snap to GRID; orthogonality repaired with L-jogs; zero-length
+    segments dropped.
+    """
+    def _endpoint(section_pt, candidates):
+        # nearest pin of this edge to ELK's float endpoint
+        sx, sy = section_pt["x"], section_pt["y"]
+        return min(candidates, key=lambda pid: (moved_pins[pid][0] - sx) ** 2
+                                               + (moved_pins[pid][1] - sy) ** 2)
+
+    segments = []
+    for edge in elk_edges:
+        pin_ids = list(edge["sources"]) + list(edge["targets"])
+        for section in edge.get("sections", []):
+            start_pid = _endpoint(section["startPoint"], pin_ids)
+            end_pid = _endpoint(section["endPoint"], pin_ids)
+            pts = [moved_pins[start_pid]]
+            for bp in section.get("bendPoints", []):
+                pts.append((_snap(bp["x"]), _snap(bp["y"])))
+            pts.append(moved_pins[end_pid])
+            pts = _orthogonalize(pts)
+            for a, b in zip(pts, pts[1:]):
+                if a != b:
+                    segments.append((a, b))
+    return segments
+
+
+def find_junctions(segments):
+    """Grid points where >=3 segment endpoints meet."""
+    from collections import Counter
+    counts = Counter()
+    for a, b in segments:
+        counts[a] += 1
+        counts[b] += 1
+    return sorted(pt for pt, n in counts.items() if n >= 3)

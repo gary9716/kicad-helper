@@ -154,5 +154,74 @@ class TestRunElk(unittest.TestCase):
         self.assertTrue(kwargs["text"])
 
 
+from kicad_skill.elk_layout import snap_deltas, derive_wires
+
+
+class TestSnapAndDerive(unittest.TestCase):
+    def assert_on_grid(self, v, msg=None):
+        # Float modulo artifact: an on-grid value like 91.44 % 1.27 can return
+        # ~1.2699999 instead of 0. Accept residues near either end of [0, 1.27).
+        r = v % 1.27
+        self.assertLess(min(r, 1.27 - r), 1e-6, msg or f"{v} off grid")
+
+    def test_deltas_snapped_to_grid(self):
+        _, symbols = load_fixture_symbols()
+        # fake ELK result: every node shifted to a float origin
+        layouted = {"children": [
+            {"id": s["ref"], "x": 3.1, "y": 7.9} for s in symbols
+        ]}
+        deltas = snap_deltas(layouted, symbols)
+        for ref, (dx, dy) in deltas.items():
+            self.assert_on_grid(dx, msg=f"{ref} dx {dx} off grid")
+            self.assert_on_grid(dy)
+
+    def test_derive_wires_endpoints_are_exact_pins_and_orthogonal(self):
+        # one edge U2:1 -> U3:1 with a float ELK route
+        moved_pins = {"U2:1": (50.8, 30.48), "U3:1": (91.44, 40.64)}
+        elk_edges = [{
+            "id": "e0_TXCAN",
+            "sources": ["U2:1"], "targets": ["U3:1"],
+            "sections": [{
+                "startPoint": {"x": 50.79, "y": 30.5},
+                "endPoint": {"x": 91.4, "y": 40.6},
+                "bendPoints": [{"x": 70.1, "y": 30.5}, {"x": 70.1, "y": 40.6}],
+            }],
+        }]
+        wires = derive_wires(elk_edges, moved_pins)
+        # flatten all segments
+        pts = set()
+        for seg in wires:
+            (x1, y1), (x2, y2) = seg
+            pts.add((x1, y1)); pts.add((x2, y2))
+            # orthogonal
+            self.assertTrue(x1 == x2 or y1 == y2, f"diagonal segment {seg}")
+            # on grid
+            for v in (x1, y1, x2, y2):
+                self.assert_on_grid(v)
+        # exact pin endpoints present
+        self.assertIn((50.8, 30.48), pts)
+        self.assertIn((91.44, 40.64), pts)
+
+    def test_snap_breaking_orthogonality_inserts_jog(self):
+        # start/end pins whose snap forces a non-collinear join
+        moved_pins = {"A:1": (0.0, 0.0), "B:1": (5.08, 2.54)}
+        elk_edges = [{
+            "id": "e0_X",
+            "sources": ["A:1"], "targets": ["B:1"],
+            "sections": [{
+                "startPoint": {"x": 0.0, "y": 0.0},
+                "endPoint": {"x": 5.0, "y": 2.5},
+                "bendPoints": [],
+            }],
+        }]
+        wires = derive_wires(elk_edges, moved_pins)
+        for (x1, y1), (x2, y2) in wires:
+            self.assertTrue(x1 == x2 or y1 == y2)
+        # path connects A to B
+        pts = {p for seg in wires for p in seg}
+        self.assertIn((0.0, 0.0), pts)
+        self.assertIn((5.08, 2.54), pts)
+
+
 if __name__ == "__main__":
     unittest.main()
