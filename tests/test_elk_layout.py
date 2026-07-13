@@ -131,5 +131,28 @@ class TestBuildElkGraph(unittest.TestCase):
                                  min(dists, key=dists.get))
 
 
+import json as _json
+from unittest import mock
+
+from kicad_skill.elk_layout import run_elk
+
+
+class TestRunElk(unittest.TestCase):
+    @mock.patch("kicad_skill.elk_layout.subprocess.run")
+    def test_pipes_graph_json_through_node_runner(self, mock_run):
+        graph = {"id": "root", "children": []}
+        mock_run.return_value = mock.Mock(stdout=_json.dumps({"id": "root", "x": 0}))
+        result = run_elk(graph)
+        self.assertEqual(result["id"], "root")
+        cmd = mock_run.call_args[0][0]
+        self.assertEqual(cmd[0], "node")
+        self.assertTrue(cmd[1].endswith(os.path.join("tools", "elk_runner.js")))
+        kwargs = mock_run.call_args[1]
+        self.assertEqual(_json.loads(kwargs["input"]), graph)
+        self.assertTrue(kwargs["check"])
+        self.assertTrue(kwargs["capture_output"])
+        self.assertTrue(kwargs["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

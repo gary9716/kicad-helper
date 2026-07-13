@@ -128,3 +128,22 @@ def build_elk_graph(symbols, edge_nets):
         "children": children,
         "edges": edges,
     }
+
+
+_RUNNER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "tools", "elk_runner.js")
+
+
+def run_elk(graph):
+    """Pipe the graph through `node tools/elk_runner.js`.
+
+    Errors propagate bare (FileNotFoundError if node missing,
+    CalledProcessError carrying elkjs stderr) — same style as render-netlist.
+    One-time setup: `npm install --prefix tools/`.
+    """
+    proc = subprocess.run(
+        ["node", _RUNNER],
+        input=json.dumps(graph),
+        capture_output=True, text=True, check=True,
+    )
+    return json.loads(proc.stdout)
