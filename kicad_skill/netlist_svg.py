@@ -47,7 +47,10 @@ def build_yosys_netlist(schematic_path, table_path=None):
         port_directions = {}
         connections = {}
         for num in pins:
-            port_directions[num] = "inout"
+            # netlistsvg's JSON schema only allows "input"/"output" (no "inout");
+            # direction isn't tracked by extract_actual_netlist, so pick "input"
+            # uniformly — this is a connectivity diagram, not a real schematic.
+            port_directions[num] = "input"
             pid = f"{ref}:{num}"
             connections[num] = [bit_by_pid[pid]] if pid in bit_by_pid else []
         cell_json[ref] = {
