@@ -223,5 +223,52 @@ class TestSnapAndDerive(unittest.TestCase):
         self.assertIn((5.08, 2.54), pts)
 
 
+import shutil
+import tempfile
+
+from kicad_skill.elk_layout import elk_layout_schematic
+
+
+class TestElkLayoutSchematic(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        for fname in os.listdir(FIXTURE):
+            shutil.copy(os.path.join(FIXTURE, fname), self.tmp)
+        self.sch = os.path.join(self.tmp, "mcp_test.kicad_sch")
+        self.table = os.path.join(self.tmp, "sym-lib-table")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    @mock.patch("kicad_skill.elk_layout.run_elk")
+    def test_identity_layout_preserves_connectivity(self, mock_elk):
+        """ELK mocked to return every node at its CURRENT origin with no edge
+        sections: symbols must not move; edge-nets (with no routes returned)
+        fall back to labels; connectivity must survive exactly."""
+        from kicad_skill.netlist_eval import extract_actual_netlist
+
+        before = {frozenset(n) for n in
+                  extract_actual_netlist(self.sch, self.table) if len(n) >= 2}
+
+        def fake_run(graph):
+            # echo each node at its current origin (bbox min corner), no routes
+            _, symbols = load_fixture_symbols()
+            by_ref = {s["ref"]: s for s in symbols}
+            for c in graph["children"]:
+                b = by_ref[c["id"]]["bbox"]
+                c["x"], c["y"] = b.xmin, b.ymin
+            for e in graph["edges"]:
+                e["sections"] = []
+            return graph
+        mock_elk.side_effect = fake_run
+
+        report = elk_layout_schematic(self.sch, self.table)
+        self.assertTrue(report["ok"], report)
+
+        after = {frozenset(n) for n in
+                 extract_actual_netlist(self.sch, self.table) if len(n) >= 2}
+        self.assertEqual(before, after)
+
+
 if __name__ == "__main__":
     unittest.main()
