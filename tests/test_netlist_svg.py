@@ -1,5 +1,7 @@
+import json
 import os
 import unittest
+from unittest import mock
 
 from kicad_skill.netlist_eval import extract_actual_netlist
 from kicad_skill.netlist_svg import build_yosys_netlist
@@ -60,6 +62,37 @@ class TestBuildYosysNetlist(unittest.TestCase):
             for bit in bits
         }
         self.assertTrue(all_netname_bits.issubset(all_cell_bits))
+
+
+class TestRenderNetlistSvg(unittest.TestCase):
+    def setUp(self):
+        base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
+        self.schematic = os.path.join(base, "mcp_test.kicad_sch")
+        self.table = os.path.join(base, "sym-lib-table")
+
+    @mock.patch("kicad_skill.netlist_svg.subprocess.run")
+    def test_invokes_npx_netlistsvg_and_cleans_up_temp_json(self, mock_run):
+        from kicad_skill.netlist_svg import render_netlist_svg
+
+        written_json = {}
+        original_run = mock_run.side_effect
+
+        def capture_and_check(cmd, check):
+            self.assertEqual(cmd[:3], ["npx", "--yes", "netlistsvg"])
+            self.assertEqual(cmd[-2], "-o")
+            tmp_path = cmd[3]
+            self.assertTrue(os.path.exists(tmp_path))
+            with open(tmp_path) as f:
+                written_json.update(json.load(f))
+
+        mock_run.side_effect = capture_and_check
+
+        render_netlist_svg(self.schematic, "/tmp/does_not_matter.svg", self.table)
+
+        self.assertIn("modules", written_json)
+        # temp file must be removed after the call, regardless of side_effect
+        tmp_path = mock_run.call_args[0][0][3]
+        self.assertFalse(os.path.exists(tmp_path))
 
 
 if __name__ == "__main__":
