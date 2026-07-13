@@ -3,96 +3,83 @@ import os
 import unittest
 from unittest import mock
 
-from kicad_skill.netlist_eval import extract_actual_netlist
-from kicad_skill.netlist_svg import build_yosys_netlist
+from kicad_skill.netlist_svg import build_yosys_netlist, render_netlist_svg
+
+FIXTURE_GT = os.path.join(os.path.dirname(__file__), "fixtures", "can_node",
+                          "can_node.groundtruth.json")
+
+
+def load_gt_nets():
+    with open(FIXTURE_GT, encoding="utf-8") as f:
+        return json.load(f)["nets"]
 
 
 class TestBuildYosysNetlist(unittest.TestCase):
     def setUp(self):
-        base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
-        self.schematic = os.path.join(base, "mcp_test.kicad_sch")
-        self.table = os.path.join(base, "sym-lib-table")
+        self.nets = load_gt_nets()
 
     def test_every_pin_appears_as_a_cell_port(self):
-        netlist = build_yosys_netlist(self.schematic, self.table)
-        module = netlist["modules"]["top"]
-        actual_nets = extract_actual_netlist(self.schematic, self.table)
-
-        expected_refs = {pid.split(":")[0] for net in actual_nets for pid in net}
+        module = build_yosys_netlist(self.nets)["modules"]["top"]
+        expected_refs = {p.split(":")[0] for n in self.nets for p in n["pins"]}
         self.assertEqual(set(module["cells"].keys()), expected_refs)
-
-        for net in actual_nets:
-            for pid in net:
+        for n in self.nets:
+            for pid in n["pins"]:
                 ref, num = pid.split(":")
                 self.assertIn(num, module["cells"][ref]["connections"])
 
-    def test_multi_pin_nets_become_netnames_single_pin_nets_do_not(self):
-        netlist = build_yosys_netlist(self.schematic, self.table)
-        module = netlist["modules"]["top"]
-        actual_nets = extract_actual_netlist(self.schematic, self.table)
+    def test_netnames_use_gt_names(self):
+        module = build_yosys_netlist(self.nets)["modules"]["top"]
+        gt_names = {n["name"] for n in self.nets if len(n["pins"]) >= 2}
+        self.assertEqual(set(module["netnames"].keys()), gt_names)
 
-        multi_pin_count = sum(1 for net in actual_nets if len(net) >= 2)
-        self.assertEqual(len(module["netnames"]), multi_pin_count)
+    def test_single_pin_nets_render_port_but_no_netname(self):
+        nets = [{"name": "SIG", "pins": ["U9:1", "U8:2"]},
+                {"name": "NC", "pins": ["U9:3"]}]
+        module = build_yosys_netlist(nets)["modules"]["top"]
+        self.assertIn("3", module["cells"]["U9"]["connections"])
+        self.assertEqual(module["cells"]["U9"]["connections"]["3"], [])
+        self.assertEqual(set(module["netnames"]), {"SIG"})
 
-    def test_known_vdd_gnd_short_collapses_to_one_netname(self):
-        # can_node fixture is a known-bad schematic: VDD and GND pins land on
-        # a single electrical net (see tests/test_netlist_eval.py). The SVG
-        # netlist must reproduce that merge, not silently split it.
-        netlist = build_yosys_netlist(self.schematic, self.table)
-        module = netlist["modules"]["top"]
-
-        vdd_gnd_pins = {"U1:5", "U1:6"}  # one VDD pin, one GND pin on MCU
-        bits_seen = set()
-        for ref_num in vdd_gnd_pins:
-            ref, num = ref_num.split(":")
-            for conn in module["cells"][ref]["connections"][num]:
-                bits_seen.add(conn)
-        # If they were still shorted, both pins resolve to the SAME net id.
-        self.assertEqual(len(bits_seen), 1)
+    def test_duplicate_net_names_are_uniquified(self):
+        nets = [{"name": "N", "pins": ["A:1", "B:1"]},
+                {"name": "N", "pins": ["C:1", "D:1"]}]
+        module = build_yosys_netlist(nets)["modules"]["top"]
+        self.assertEqual(len(module["netnames"]), 2)
+        self.assertIn("N", module["netnames"])
 
     def test_connection_ids_match_between_cell_and_netname(self):
-        netlist = build_yosys_netlist(self.schematic, self.table)
-        module = netlist["modules"]["top"]
-
-        all_netname_bits = {bit for nn in module["netnames"].values() for bit in nn["bits"]}
-        all_cell_bits = {
-            bit
-            for cell in module["cells"].values()
-            for bits in cell["connections"].values()
-            for bit in bits
-        }
-        self.assertTrue(all_netname_bits.issubset(all_cell_bits))
+        module = build_yosys_netlist(self.nets)["modules"]["top"]
+        netname_bits = {b for nn in module["netnames"].values() for b in nn["bits"]}
+        cell_bits = {b for c in module["cells"].values()
+                     for bits in c["connections"].values() for b in bits}
+        self.assertTrue(netname_bits.issubset(cell_bits))
+        # every net's pins share exactly its bit
+        by_name = {n["name"]: n["pins"] for n in self.nets if len(n["pins"]) >= 2}
+        for name, pins in by_name.items():
+            bit = module["netnames"][name]["bits"][0]
+            for pid in pins:
+                ref, num = pid.split(":")
+                self.assertEqual(module["cells"][ref]["connections"][num], [bit])
 
 
 class TestRenderNetlistSvg(unittest.TestCase):
-    def setUp(self):
-        base = os.path.join(os.path.dirname(__file__), "fixtures", "can_node")
-        self.schematic = os.path.join(base, "mcp_test.kicad_sch")
-        self.table = os.path.join(base, "sym-lib-table")
-
     @mock.patch("kicad_skill.netlist_svg.subprocess.run")
     def test_invokes_npx_netlistsvg_and_cleans_up_temp_json(self, mock_run):
-        from kicad_skill.netlist_svg import render_netlist_svg
+        written = {}
 
-        written_json = {}
-        original_run = mock_run.side_effect
-
-        def capture_and_check(cmd, check):
+        def capture(cmd, check):
             self.assertEqual(cmd[:3], ["npx", "--yes", "netlistsvg"])
             self.assertEqual(cmd[-2], "-o")
-            tmp_path = cmd[3]
-            self.assertTrue(os.path.exists(tmp_path))
-            with open(tmp_path) as f:
-                written_json.update(json.load(f))
+            with open(cmd[3]) as f:
+                written.update(json.load(f))
+        mock_run.side_effect = capture
 
-        mock_run.side_effect = capture_and_check
+        render_netlist_svg(FIXTURE_GT, "/tmp/out.svg")
 
-        render_netlist_svg(self.schematic, "/tmp/does_not_matter.svg", self.table)
-
-        self.assertIn("modules", written_json)
-        # temp file must be removed after the call, regardless of side_effect
-        tmp_path = mock_run.call_args[0][0][3]
-        self.assertFalse(os.path.exists(tmp_path))
+        self.assertIn("modules", written)
+        self.assertIn("VDD", written["modules"]["top"]["netnames"])
+        tmp = mock_run.call_args[0][0][3]
+        self.assertFalse(os.path.exists(tmp))
 
 
 if __name__ == "__main__":

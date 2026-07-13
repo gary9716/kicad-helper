@@ -1,45 +1,45 @@
-"""Convert a schematic's flattened connectivity into netlistsvg's Yosys-style
-netlist JSON, then render it to SVG via `npx netlistsvg`.
+"""Render a ground-truth netlist JSON to an SVG connectivity diagram via
+`npx netlistsvg`.
 
-Every component reference becomes a generic labeled box (one port per pin,
-keyed by pin number); every electrical net with 2+ pins becomes a wire. This
-is a connectivity diagram, not a real schematic — no R/C/U symbol art.
+Input is the GT netlist format used by check-netlist/regenerate
+({"nets": [{"name", "pins": ["Ref:Num", ...]}], ...}); only nets[].name and
+nets[].pins are consumed. Every component reference becomes a generic labeled
+box (one port per pin, keyed by pin number); every net with 2+ pins becomes a
+wire carrying its GT name. Connectivity diagram, not a real schematic.
 """
 import json
 import os
 import subprocess
 import tempfile
 
-from .netlist_eval import extract_actual_netlist
 
+def build_yosys_netlist(gt_nets):
+    """GT nets ([{"name", "pins"}]) -> Yosys-style netlist JSON for netlistsvg.
 
-def build_yosys_netlist(schematic_path, table_path=None):
-    """Build the Yosys-style netlist JSON netlistsvg expects.
-
-    Derives both cells (ref -> its pins) and nets directly from
-    extract_actual_netlist()'s flattened output: every pin in the design
-    already appears in some net there, singleton sets included for
-    unconnected pins, so no separate pin enumeration pass is needed.
+    Netnames keyed by GT net name (duplicates uniquified with _2, _3, ...);
+    single-pin nets contribute ports but no netname (dangling stub).
     """
-    actual_nets = extract_actual_netlist(schematic_path, table_path)
-
-    cells = {}  # ref -> {number -> None}, insertion order preserves discovery
-    for net in actual_nets:
-        for pid in net:
+    cells = {}  # ref -> {number -> None}
+    for net in gt_nets:
+        for pid in net["pins"]:
             ref, num = pid.split(":", 1)
             cells.setdefault(ref, {})[num] = None
 
     netnames = {}
     bit_by_pid = {}
     next_bit = 1
-    for net in sorted(actual_nets, key=lambda s: sorted(s)[0]):
-        if len(net) < 2:
+    for net in gt_nets:
+        if len(net["pins"]) < 2:
             continue
+        name = net["name"]
+        suffix = 2
+        while name in netnames:
+            name = f'{net["name"]}_{suffix}'
+            suffix += 1
         bit = next_bit
         next_bit += 1
-        name = f"net{bit}"
         netnames[name] = {"bits": [bit]}
-        for pid in net:
+        for pid in net["pins"]:
             bit_by_pid[pid] = bit
 
     cell_json = {}
@@ -47,9 +47,8 @@ def build_yosys_netlist(schematic_path, table_path=None):
         port_directions = {}
         connections = {}
         for num in pins:
-            # netlistsvg's JSON schema only allows "input"/"output" (no "inout");
-            # direction isn't tracked by extract_actual_netlist, so pick "input"
-            # uniformly — this is a connectivity diagram, not a real schematic.
+            # netlistsvg's JSON schema only allows "input"/"output"; direction
+            # isn't tracked in GT netlists, so "input" uniformly.
             port_directions[num] = "input"
             pid = f"{ref}:{num}"
             connections[num] = [bit_by_pid[pid]] if pid in bit_by_pid else []
@@ -70,13 +69,15 @@ def build_yosys_netlist(schematic_path, table_path=None):
     }
 
 
-def render_netlist_svg(schematic_path, output_path, table_path=None):
-    """Build the netlist JSON and shell out to `npx netlistsvg` to render it.
+def render_netlist_svg(netlist_path, output_path):
+    """Load a GT netlist JSON and shell out to `npx netlistsvg`.
 
-    Errors propagate as-is (CalledProcessError / FileNotFoundError) — no
-    message wrapping, matching fetch_easyeda_component's style.
+    Errors propagate as-is (CalledProcessError / FileNotFoundError /
+    KeyError on malformed JSON) — no message wrapping.
     """
-    netlist = build_yosys_netlist(schematic_path, table_path)
+    with open(netlist_path, encoding="utf-8") as f:
+        gt_nets = json.load(f)["nets"]
+    netlist = build_yosys_netlist(gt_nets)
 
     fd, tmp_path = tempfile.mkstemp(suffix=".json")
     try:
