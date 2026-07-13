@@ -36,7 +36,7 @@ Only `nets[].name` and `nets[].pins` are consumed. `components` and all other ke
 ## Changes
 
 **Modified:** `kicad_skill/netlist_svg.py`
-- `build_yosys_netlist(gt_nets)` — new signature: takes the parsed nets list (`[{"name", "pins"}]`). Cells: every `Ref:Num` across all nets → port on cell `Ref`. Netnames: one per net with ≥2 pins, **keyed by the GT net name** (collision-safe: duplicate names get `_2`, `_3` suffixes); single-pin nets contribute ports but no netname (dangling stub, unchanged from v1). `port_directions` stays `"input"` (netlistsvg schema).
+- `build_yosys_netlist(gt_nets)` — new signature: takes the parsed nets list (`[{"name", "pins"}]`). Cells: every `Ref:Num` across all nets → port on cell `Ref`. Netnames: one per net with ≥2 pins, **keyed by the GT net name** (collision-safe: duplicate names get `_2`, `_3` suffixes); single-pin nets contribute ports but no netname (dangling stub, unchanged from v1). `port_directions` stays `"input"` (netlistsvg schema). Visible-text quirks (verified empirically): netlistsvg renders a cell's TYPE string as its box label and never draws `netnames` as text — so cell `type` carries the component ref (not `"generic"`), and every named net is additionally exposed as a module port, which netlistsvg does label.
 - `render_netlist_svg(netlist_path, output_path)` — new signature: loads the JSON, builds, same `npx --yes netlistsvg` invocation, same temp-file + bare-error-propagation behavior.
 
 **Modified:** `kicad_skill/main.py` — `render-netlist` subparser: `--schematic`/`--table` removed, `--netlist` added; dispatch updated.
