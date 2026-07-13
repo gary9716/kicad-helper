@@ -33,7 +33,7 @@ kicad-helper render-netlist --schematic X.kicad_sch --output X.svg [--table sym-
    - Reuse `netlist_eval._parse_sheet` + the same recursive sheet-walk `extract_actual_netlist` already performs, to collect, per flattened scope: every component ref and its full pin list (`{number, name}`) from `get_symbol_pins_global` (regardless of connection state).
    - Reuse `netlist_eval.extract_actual_netlist(schematic_path, table_path)` for the flattened net groups (sets of `"Ref:Num"`).
    - Emit one Yosys-JSON module containing:
-     - one `cell` per component ref, `type: "generic"`, one port per pin keyed by pin number, port direction unspecified (`"direction": "inout"` — netlistsvg's generic skin doesn't care).
+     - one `cell` per component ref, `type: "generic"`, one port per pin keyed by pin number, port direction unspecified (`"port_directions": "input"` uniformly — netlistsvg's JSON schema only allows `input`/`output`, not `inout`; direction isn't tracked by `extract_actual_netlist`, so `input` is an arbitrary-but-valid placeholder).
      - one `netname` entry per net group with >=2 pins, `bits` assigned sequential integer net ids; ports reference those same ids.
      - net groups with exactly 1 pin are skipped (nothing to draw — matches how unconnected pins already render as dangling stubs on the cell box).
    - Refs that repeat across sheets (same ref reused in two sub-sheets) collide by design — flattening assumes globally-unique refs, same assumption `extract_actual_netlist` already makes for shorts/opens comparison.
@@ -58,7 +58,7 @@ New subparser `render-netlist` with `--schematic`, `--output`, `--table` (option
       "cells": {
         "U101": {
           "type": "generic",
-          "port_directions": {"1": "inout", "2": "inout"},
+          "port_directions": {"1": "input", "2": "input"},
           "connections": {"1": [10], "2": [11]}
         }
       },
@@ -71,7 +71,9 @@ New subparser `render-netlist` with `--schematic`, `--output`, `--table` (option
 }
 ```
 
-Cell ports are keyed by pin number (string). `port_directions` values are constant `"inout"` — direction isn't tracked by `extract_actual_netlist`, and netlistsvg's default/generic skin doesn't visually distinguish them.
+Cell ports are keyed by pin number (string). `port_directions` values are constant `"input"` — netlistsvg's JSON schema rejects `"inout"` (only `input`/`output` are valid), direction isn't tracked by `extract_actual_netlist`, and netlistsvg's default/generic skin doesn't visually distinguish them anyway.
+
+**Implementation note (post-build):** `build_yosys_netlist` derives cells AND nets from a single `extract_actual_netlist()` call rather than a separate `_parse_sheet` re-walk — every pin in the design already appears in that function's flattened output (singleton sets included for unconnected pins), so no second enumeration pass is needed. Documented in `docs/superpowers/plans/2026-07-13-render-netlist-svg.md`'s "Deviation from spec" note.
 
 ## Scope Limits (documented, not hidden)
 
