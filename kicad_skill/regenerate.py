@@ -295,6 +295,19 @@ def regenerate_schematic(gt_path, table_path, out_sch, max_iter=None, use_erc=Tr
     Returns (out_sch, report). The report always carries the ground-truth
     comparison keys plus, when ERC ran, erc_error_count and erc_violations.
     """
+    if routing == "elk":
+        # Build an all-labels schematic (electrically clean by construction),
+        # then hand placement+routing to the ELK engine.
+        out_sch, rep = regenerate_schematic(gt_path, table_path, out_sch,
+                                            max_iter=max_iter, use_erc=use_erc,
+                                            routing="labels")
+        from .elk_layout import elk_layout_schematic
+        elk_rep = elk_layout_schematic(out_sch, table_path)
+        if not elk_rep["ok"]:
+            raise RuntimeError(f"elk-layout broke connectivity: {elk_rep['report']}")
+        rep["elk"] = {k: elk_rep[k] for k in ("wires", "labels", "junctions")}
+        return out_sch, rep
+
     gt = load_ground_truth(gt_path)
     nets, components = load_gt_components(gt)
     placements = _placements_from_components(components)

@@ -304,5 +304,36 @@ class TestElkLayoutSchematic(unittest.TestCase):
         self.assertEqual(before, after)
 
 
+class TestRegenerateElkMode(unittest.TestCase):
+    @mock.patch("kicad_skill.elk_layout.run_elk")
+    def test_regenerate_with_elk_routing(self, mock_elk):
+        from kicad_skill.regenerate import regenerate_schematic
+
+        def spread_nodes(graph):
+            # Distinct, widely separated positions: stacking every node at
+            # the origin would make pins coincide and short the netlist.
+            for i, c in enumerate(graph["children"]):
+                c.setdefault("x", i * 200.0)
+                c.setdefault("y", 0.0)
+            for e in graph["edges"]:
+                e["sections"] = []
+            return graph
+        mock_elk.side_effect = spread_nodes
+
+        tmp = tempfile.mkdtemp()
+        try:
+            for fname in os.listdir(FIXTURE):
+                shutil.copy(os.path.join(FIXTURE, fname), tmp)
+            out = os.path.join(tmp, "regen_elk.kicad_sch")
+            gt = os.path.join(tmp, "can_node.groundtruth.json")
+            table = os.path.join(tmp, "sym-lib-table")
+            out_sch, rep = regenerate_schematic(gt, table, out,
+                                                use_erc=False, routing="elk")
+            self.assertFalse(rep["fatal"], rep)
+            self.assertTrue(mock_elk.called)
+        finally:
+            shutil.rmtree(tmp)
+
+
 if __name__ == "__main__":
     unittest.main()
